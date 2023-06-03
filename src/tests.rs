@@ -23,6 +23,7 @@ fn init_tracing() {
 #[test]
 fn registers() {
     init_tracing();
+
     Network::reset();
 
     // deploy parachain registry contract to evm parachain

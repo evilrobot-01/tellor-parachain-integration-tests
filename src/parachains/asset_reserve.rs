@@ -7,10 +7,10 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
         .build_storage::<Runtime>()
         .unwrap();
 
+    // set parachain id
     let parachain_info_config = parachain_info::GenesisConfig {
         parachain_id: para_id.into(),
     };
-
     <parachain_info::GenesisConfig as GenesisBuild<Runtime, _>>::assimilate_storage(
         &parachain_info_config,
         &mut t,

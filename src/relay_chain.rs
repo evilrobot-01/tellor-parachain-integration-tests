@@ -11,12 +11,14 @@ pub fn new_ext() -> sp_io::TestExternalities {
         .build_storage::<Runtime>()
         .unwrap();
 
+    // set initial balances
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![(ALICE, INITIAL_BALANCE)],
     }
     .assimilate_storage(&mut t)
     .unwrap();
 
+    // set parachain configuration
     polkadot_runtime_parachains::configuration::GenesisConfig::<Runtime> {
         config: default_parachains_host_configuration(),
     }
