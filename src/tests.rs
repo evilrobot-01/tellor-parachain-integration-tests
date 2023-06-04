@@ -1,10 +1,9 @@
 use super::*;
 use frame_support::assert_ok;
 use parachains::{
-    evm::contracts::REGISTRY_CONTRACT_ADDRESS, evm::contracts::REGISTRY_CONTRACT_BYTECODE,
-    evm::ALITH, evm::PALLET_DERIVATIVE_ACCOUNT,
+    evm::contracts::registry::REGISTRY_CONTRACT_ADDRESS, evm::PALLET_DERIVATIVE_ACCOUNT,
 };
-use sp_runtime::app_crypto::sp_core::{H160, U256};
+use sp_runtime::app_crypto::sp_core::H160;
 use std::sync::Once;
 use xcm_emulator::TestExt;
 
@@ -27,7 +26,12 @@ fn registers() {
     Network::reset();
 
     // deploy parachain registry contract to evm parachain
-    deploy_contracts();
+    EvmParachain::execute_with(|| {
+        use moonbase_runtime::System;
+        use parachains::evm::contracts::registry;
+        registry::deploy();
+        System::reset_events()
+    });
 
     // register pallet on oracle consumer parachain with contracts on evm parachain via xcm
     OracleConsumerParachain::execute_with(|| {
@@ -58,7 +62,8 @@ fn registers() {
             })
         )));
         // parachain registered event emitted by parachain registry contract
-        let parachain_registered = parachains::evm::contracts::parachain_registered(3_000);
+        let parachain_registered =
+            parachains::evm::contracts::registry::parachain_registered(3_000);
         assert!(System::events().iter().any(|r| {
             match &r.event {
                 RuntimeEvent::EVM(pallet_evm::Event::Log { log }) => {
@@ -72,28 +77,14 @@ fn registers() {
     });
 }
 
-fn deploy_contracts() {
-    use moonbase_runtime::{RuntimeEvent, RuntimeOrigin, System, EVM};
+#[test]
+fn creates_xctrb() {
+    init_tracing();
 
-    let gas_limit = 10_000_000;
-    let max_fee_per_gas = U256::from(1_250_000_000);
+    Network::reset();
 
+    // register TRB as foreign asset
     EvmParachain::execute_with(|| {
-        // create parachain registry contract
-        assert_ok!(EVM::create(
-            RuntimeOrigin::root(),
-            ALITH.into(),
-            REGISTRY_CONTRACT_BYTECODE.into(),
-            U256::zero(),
-            gas_limit,
-            max_fee_per_gas,
-            None,
-            None,
-            Vec::new()
-        ));
-        System::assert_last_event(RuntimeEvent::EVM(pallet_evm::Event::Created {
-            address: REGISTRY_CONTRACT_ADDRESS.into(),
-        }));
-        System::reset_events()
+        parachains::evm::create_xctrb();
     });
 }
