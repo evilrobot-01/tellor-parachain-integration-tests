@@ -5,6 +5,7 @@ use moonbase_runtime::{
     asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, Runtime,
     RuntimeEvent, RuntimeOrigin, System, EVM,
 };
+use sp_runtime::app_crypto::sp_core::bytes::from_hex;
 use xcm::prelude::{GeneralIndex, PalletInstance, Parachain};
 use xcm::v3::{Junctions, MultiLocation};
 
@@ -62,6 +63,7 @@ pub(crate) fn create_xctrb() {
         decimals: 18,
         is_frozen: false,
     };
+    // register asset
     assert_ok!(AssetManager::register_foreign_asset(
         RuntimeOrigin::root(),
         asset.clone(),
@@ -72,9 +74,32 @@ pub(crate) fn create_xctrb() {
     System::assert_last_event(RuntimeEvent::AssetManager(
         pallet_asset_manager::Event::ForeignAssetRegistered {
             asset_id: XCTRB,
-            asset,
+            asset: asset.clone(),
             metadata,
         },
+    ));
+    // set units per second
+    let units_per_second = 100_000; // todo: size correctly
+    assert_ok!(AssetManager::set_asset_units_per_second(
+        RuntimeOrigin::root(),
+        asset.clone(),
+        units_per_second,
+        5, // todo: size correctly
+    ));
+    System::assert_last_event(RuntimeEvent::AssetManager(
+        pallet_asset_manager::Event::UnitsPerSecondChanged {
+            asset_type: asset,
+            units_per_second,
+        },
+    ));
+    // push revert code to EVM: https://github.com/PureStake/xcm-tools/blob/4a3dcdb49434bcc019106677d01be54f9f17b30b/scripts/xcm-asset-registrator.ts#L87-L107
+    // required for transferFrom usage within a smart contract, especially to return revert specifics
+    assert_ok!(System::set_storage(
+        RuntimeOrigin::root(),
+        vec![(
+            from_hex("0x1da53b775b270400e7e61ed5cbc5a146ea70f53d5a3306ce02aaf97049cf181a8d25f78201571c23f3f5096d309394ecffffffffc8be577a279484431b9444687ec3d2ae").unwrap(),
+            from_hex("0x1460006000fd").unwrap()
+        )]
     ));
 }
 
