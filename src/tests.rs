@@ -1,6 +1,8 @@
 use super::*;
+use crate::parachains::evm::contracts::governance::GOVERNANCE_CONTRACT_ADDRESS;
+use crate::parachains::evm::contracts::staking::STAKING_CONTRACT_ADDRESS;
 use crate::parachains::evm::XCTRB_ADDRESS;
-use frame_support::assert_ok;
+use frame_support::{assert_ok, log};
 use parachains::{
     evm::contracts::registry::REGISTRY_CONTRACT_ADDRESS, evm::PALLET_DERIVATIVE_ACCOUNT,
 };
@@ -85,9 +87,15 @@ fn deploys_contracts() {
     Network::reset();
 
     EvmParachain::execute_with(|| {
-        use parachains::{evm::contracts::registry, evm::contracts::staking};
+        use parachains::{
+            evm::contracts::governance, evm::contracts::registry, evm::contracts::staking,
+            evm::ALITH,
+        };
         registry::deploy();
         staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+        governance::init(&STAKING_CONTRACT_ADDRESS);
     });
 }
 
