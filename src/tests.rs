@@ -2,7 +2,7 @@ use super::*;
 use crate::parachains::evm::contracts::governance::GOVERNANCE_CONTRACT_ADDRESS;
 use crate::parachains::evm::contracts::staking::STAKING_CONTRACT_ADDRESS;
 use crate::parachains::evm::XCTRB_ADDRESS;
-use frame_support::{assert_ok, log};
+use frame_support::assert_ok;
 use parachains::{
     evm::contracts::registry::REGISTRY_CONTRACT_ADDRESS, evm::PALLET_DERIVATIVE_ACCOUNT,
 };
