@@ -1,4 +1,5 @@
 use super::*;
+use crate::parachains::evm::XCTRB_ADDRESS;
 use frame_support::assert_ok;
 use parachains::{
     evm::contracts::registry::REGISTRY_CONTRACT_ADDRESS, evm::PALLET_DERIVATIVE_ACCOUNT,
@@ -74,6 +75,19 @@ fn registers() {
                 _ => false,
             }
         }));
+    });
+}
+
+#[test]
+fn deploys_contracts() {
+    init_tracing();
+
+    Network::reset();
+
+    EvmParachain::execute_with(|| {
+        use parachains::{evm::contracts::registry, evm::contracts::staking};
+        registry::deploy();
+        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
     });
 }
 
