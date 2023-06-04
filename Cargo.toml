@@ -33,6 +33,7 @@ xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.4
 pallet-asset-manager = { git = "https://github.com/purestake/moonbeam", rev = "62ddcf21694c5c6875788acfc309cccf0cc857bd" }
 pallet-ethereum = { git = "https://github.com/purestake/frontier", branch = "moonbeam-polkadot-v0.9.40" }
 pallet-evm = { git = "https://github.com/purestake/frontier", branch = "moonbeam-polkadot-v0.9.40" }
+pallet-xcm = { git = "https://github.com/purestake/polkadot", branch = "moonbeam-polkadot-v0.9.40" }
 
 # Tellor
 tellor = { git = "https://github.com/tellor-io/tellor-pallet" }

@@ -2,6 +2,7 @@ use frame_support::{pallet_prelude::Weight, traits::GenesisBuild};
 use sp_runtime::AccountId32;
 
 pub const ALICE: AccountId32 = AccountId32::new([0u8; 32]);
+pub const BOB: AccountId32 = AccountId32::new([1u8; 32]);
 const INITIAL_BALANCE: u128 = 1_000_000_000_000;
 
 pub fn new_ext() -> sp_io::TestExternalities {

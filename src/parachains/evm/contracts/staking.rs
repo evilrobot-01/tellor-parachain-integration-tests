@@ -1,5 +1,6 @@
 use super::*;
 use ethabi::{Function, Param};
+use moonbase_runtime::Assets;
 
 pub(crate) const STAKING_CONTRACT_ADDRESS: [u8; 20] = [
     151, 9, 81, 161, 47, 151, 94, 103, 98, 72, 42, 202, 129, 229, 125, 90, 42, 78, 115, 244,
@@ -480,9 +481,12 @@ pub(crate) fn deploy(registry: &[u8; 20], token: &[u8; 20]) {
         None,
         Vec::new()
     ));
-    System::assert_last_event(RuntimeEvent::EVM(pallet_evm::Event::Created {
-        address: STAKING_CONTRACT_ADDRESS.into(),
-    }));
+    System::assert_last_event(
+        pallet_evm::Event::Created {
+            address: STAKING_CONTRACT_ADDRESS.into(),
+        }
+        .into(),
+    );
 }
 
 pub(crate) fn init(governance: &[u8; 20]) {
@@ -517,10 +521,83 @@ pub(crate) fn init(governance: &[u8; 20]) {
         None,
         Vec::new()
     ));
-    assert!(System::events().iter().any(|r| matches!(
-        r.event,
-        RuntimeEvent::EVM(pallet_evm::Event::Executed {
+    System::assert_has_event(
+        pallet_evm::Event::Executed {
             address: H160(STAKING_CONTRACT_ADDRESS),
-        })
-    )));
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn approve(by: &[u8; 20], asset: u128, delegate: &[u8; 20], amount: u128) {
+    assert_ok!(Assets::approve_transfer(
+        RuntimeOrigin::signed((*by).into()),
+        asset.into(),
+        (*delegate).into(),
+        amount
+    ));
+    //todo: assert event
+}
+
+pub(crate) fn mint(asset: u128, who: &[u8; 20], amount: u128) {
+    use frame_support::traits::fungibles::Mutate;
+
+    assert_ok!(Assets::mint_into(asset, &(*who).into(), amount));
+    //todo: assert event
+}
+
+pub(crate) fn stake(source: &[u8; 20], para_id: u32, account: Vec<u8>, amount: u128) {
+    let gas_limit = 10_000_000;
+    let max_fee_per_gas = U256::from(1_250_000_000);
+
+    #[allow(deprecated)]
+    let input = Function {
+        name: "depositParachainStake".to_string(),
+        inputs: vec![
+            Param {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                internal_type: None,
+            },
+            Param {
+                name: "_account".to_string(),
+                kind: ParamType::Bytes,
+                internal_type: None,
+            },
+            Param {
+                name: "_amount".to_string(),
+                kind: ParamType::Uint(256),
+                internal_type: None,
+            },
+        ],
+        outputs: vec![],
+        constant: None,
+        state_mutability: Default::default(),
+    }
+    .encode_input(&vec![
+        Token::Uint(para_id.into()),
+        Token::Bytes(account),
+        Token::Uint(amount.into()),
+    ])
+    .unwrap();
+
+    // init parachain staking contract
+    assert_ok!(EVM::call(
+        RuntimeOrigin::root(),
+        source.into(),
+        STAKING_CONTRACT_ADDRESS.into(),
+        input,
+        U256::zero(),
+        gas_limit,
+        max_fee_per_gas,
+        None,
+        None,
+        Vec::new()
+    ));
+    System::assert_has_event(
+        pallet_evm::Event::Executed {
+            address: H160(STAKING_CONTRACT_ADDRESS),
+        }
+        .into(),
+    );
 }

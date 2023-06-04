@@ -519,9 +519,12 @@ pub(crate) fn deploy(registry: &[u8; 20], team_multisig: &[u8; 20]) {
         None,
         Vec::new()
     ));
-    System::assert_last_event(RuntimeEvent::EVM(pallet_evm::Event::Created {
-        address: GOVERNANCE_CONTRACT_ADDRESS.into(),
-    }));
+    System::assert_last_event(
+        pallet_evm::Event::Created {
+            address: GOVERNANCE_CONTRACT_ADDRESS.into(),
+        }
+        .into(),
+    );
 }
 
 pub(crate) fn init(staking: &[u8; 20]) {
@@ -556,10 +559,10 @@ pub(crate) fn init(staking: &[u8; 20]) {
         None,
         Vec::new()
     ));
-    assert!(System::events().iter().any(|r| matches!(
-        r.event,
-        RuntimeEvent::EVM(pallet_evm::Event::Executed {
+    System::assert_has_event(
+        pallet_evm::Event::Executed {
             address: H160(GOVERNANCE_CONTRACT_ADDRESS),
-        })
-    )));
+        }
+        .into(),
+    );
 }

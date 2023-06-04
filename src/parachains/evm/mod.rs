@@ -1,8 +1,8 @@
 use super::*;
 use frame_support::assert_ok;
 use moonbase_runtime::{
-    asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, Runtime,
-    RuntimeEvent, RuntimeOrigin, System, EVM,
+    asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, EVMConfig,
+    GenesisAccount, Precompiles, Runtime, RuntimeOrigin, System, EVM,
 };
 use sp_runtime::app_crypto::sp_core::bytes::from_hex;
 use sp_runtime::app_crypto::sp_core::H160;
@@ -23,6 +23,10 @@ pub(crate) const PALLET_DERIVATIVE_ACCOUNT: [u8; 20] = [
 ];
 pub(crate) const XCTRB_ADDRESS: [u8; 20] = [
     255, 255, 255, 255, 200, 190, 87, 122, 39, 148, 132, 67, 27, 148, 68, 104, 126, 195, 210, 174,
+];
+
+const OCP_SOVEREIGN_ACCOUNT: [u8; 20] = [
+    115, 105, 98, 108, 184, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
@@ -46,10 +50,39 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
             (ALITH.into(), INITIAL_EVM_BALANCE),
             (BALTHAZAR.into(), INITIAL_EVM_BALANCE),
             (PALLET_DERIVATIVE_ACCOUNT.into(), INITIAL_EVM_BALANCE),
+            (OCP_SOVEREIGN_ACCOUNT.into(), INITIAL_EVM_BALANCE),
         ],
     }
     .assimilate_storage(&mut t)
     .unwrap();
+
+    // https://github.com/PureStake/moonbeam/blob/a814fcf36a67f0f14f40afcd7d12fd4f3c5e775b/node/service/src/chain_spec/moonbase.rs#L249
+    let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
+    let evm_config = EVMConfig {
+        // We need _some_ code inserted at the precompile address so that
+        // the evm will actually call the address.
+        accounts: Precompiles::used_addresses()
+            .map(|addr| {
+                (
+                    addr.into(),
+                    GenesisAccount {
+                        nonce: Default::default(),
+                        balance: Default::default(),
+                        storage: Default::default(),
+                        code: revert_bytecode.clone(),
+                    },
+                )
+            })
+            .collect(),
+    };
+    <pallet_evm::GenesisConfig as GenesisBuild<Runtime>>::assimilate_storage(&evm_config, &mut t)
+        .unwrap();
+
+    let xcm_config = moonbase_runtime::PolkadotXcmConfig {
+        safe_xcm_version: Some(3),
+    };
+    <pallet_xcm::GenesisConfig as GenesisBuild<Runtime>>::assimilate_storage(&xcm_config, &mut t)
+        .unwrap();
 
     let mut ext = sp_io::TestExternalities::new(t);
     ext.execute_with(|| System::set_block_number(1));
@@ -76,13 +109,14 @@ pub(crate) fn create_xctrb() {
         true
     ));
     let asset_id = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
-    System::assert_last_event(RuntimeEvent::AssetManager(
+    System::assert_last_event(
         pallet_asset_manager::Event::ForeignAssetRegistered {
             asset_id,
             asset: asset.clone(),
             metadata,
-        },
-    ));
+        }
+        .into(),
+    );
     // set units per second
     let units_per_second = 100_000; // todo: size correctly
     assert_ok!(AssetManager::set_asset_units_per_second(
@@ -91,12 +125,13 @@ pub(crate) fn create_xctrb() {
         units_per_second,
         5, // todo: size correctly
     ));
-    System::assert_last_event(RuntimeEvent::AssetManager(
+    System::assert_last_event(
         pallet_asset_manager::Event::UnitsPerSecondChanged {
             asset_type: asset,
             units_per_second,
-        },
-    ));
+        }
+        .into(),
+    );
     // push revert code to EVM: https://github.com/PureStake/xcm-tools/blob/4a3dcdb49434bcc019106677d01be54f9f17b30b/scripts/xcm-asset-registrator.ts#L87-L107
     // required for transferFrom usage within a smart contract, especially to return revert specifics
     assert_ok!(System::set_storage(

@@ -261,7 +261,10 @@ pub(crate) fn deploy() {
         None,
         Vec::new()
     ));
-    System::assert_last_event(RuntimeEvent::EVM(pallet_evm::Event::Created {
-        address: REGISTRY_CONTRACT_ADDRESS.into(),
-    }));
+    System::assert_last_event(
+        pallet_evm::Event::Created {
+            address: REGISTRY_CONTRACT_ADDRESS.into(),
+        }
+        .into(),
+    );
 }

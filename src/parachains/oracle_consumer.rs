@@ -2,6 +2,10 @@ use super::*;
 use crate::relay_chain::*;
 
 const INITIAL_BALANCE: u128 = 1_000_000_000_000;
+const PALLET_ACCOUNT: [u8; 32] = [
+    109, 111, 100, 108, 112, 121, 47, 116, 101, 108, 108, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+];
 
 pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     use oracle_consumer_runtime::{Runtime, System};
@@ -22,7 +26,10 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
 
     // set initial balances
     pallet_balances::GenesisConfig::<Runtime> {
-        balances: vec![(ALICE, INITIAL_BALANCE)],
+        balances: vec![
+            (ALICE, INITIAL_BALANCE),
+            (PALLET_ACCOUNT.into(), INITIAL_BALANCE),
+        ],
     }
     .assimilate_storage(&mut t)
     .unwrap();
