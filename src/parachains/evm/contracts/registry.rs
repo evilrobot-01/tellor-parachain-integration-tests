@@ -211,7 +211,47 @@ const CONTRACT_BYTECODE: [u8; 4558] = [
     99, 67, 0, 8, 20, 0, 51,
 ];
 
-pub(crate) fn parachain_registered(parachain: u32) -> (Vec<Hash>, Vec<u8>) {
+pub(crate) fn deploy() {
+    // create parachain registry contract
+    assert_ok!(EVM::create(
+        RuntimeOrigin::root(),
+        ALITH.into(),
+        CONTRACT_BYTECODE.into(),
+        U256::zero(),
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
+        None,
+        None,
+        Vec::new()
+    ));
+    System::assert_last_event(
+        pallet_evm::Event::Created {
+            address: REGISTRY_CONTRACT_ADDRESS.into(),
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_executed(caller: &[u8; 20]) {
+    assert!(System::events().iter().any(|r| {
+        match &r.event {
+            RuntimeEvent::Ethereum(pallet_ethereum::Event::Executed {
+                from,
+                to,
+                exit_reason,
+                ..
+            }) if from == &caller.into()
+                && to == &REGISTRY_CONTRACT_ADDRESS.into()
+                && *exit_reason == Succeed(Stopped) =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }));
+}
+
+pub(crate) fn assert_parachain_registered_event(para_id: u32) {
     let event = Event {
         name: "ParachainRegistered".to_string(),
         // address caller, uint32 parachain, address owner
@@ -234,33 +274,18 @@ pub(crate) fn parachain_registered(parachain: u32) -> (Vec<Hash>, Vec<u8>) {
         ],
         anonymous: false,
     };
-    // return expected topic and data
-    (
-        vec![event.signature()],
-        encode(&vec![
-            Token::Address(PALLET_DERIVATIVE_ACCOUNT.into()),
-            Token::Uint(parachain.into()),
-            Token::Address(PALLET_DERIVATIVE_ACCOUNT.into()),
-        ]),
-    )
-}
 
-pub(crate) fn deploy() {
-    // create parachain registry contract
-    assert_ok!(EVM::create(
-        RuntimeOrigin::root(),
-        ALITH.into(),
-        CONTRACT_BYTECODE.into(),
-        U256::zero(),
-        GAS_LIMIT,
-        MAX_FEE_PER_GAS.into(),
-        None,
-        None,
-        Vec::new()
-    ));
-    System::assert_last_event(
-        pallet_evm::Event::Created {
-            address: REGISTRY_CONTRACT_ADDRESS.into(),
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: REGISTRY_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Address(PALLET_DERIVATIVE_ACCOUNT.into()),
+                    Token::Uint(para_id.into()),
+                    Token::Address(PALLET_DERIVATIVE_ACCOUNT.into()),
+                ]),
+            },
         }
         .into(),
     );

@@ -560,3 +560,72 @@ pub(crate) fn init(staking: &[u8; 20]) {
         .into(),
     );
 }
+
+pub(crate) fn assert_executed(caller: &[u8; 20]) {
+    assert!(System::events().iter().any(|r| {
+        match &r.event {
+            RuntimeEvent::Ethereum(pallet_ethereum::Event::Executed {
+                from,
+                to,
+                exit_reason,
+                ..
+            }) if from == &caller.into()
+                && to == &GOVERNANCE_CONTRACT_ADDRESS.into()
+                && *exit_reason == Succeed(Stopped) =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }));
+}
+
+pub(crate) fn assert_new_parachain_dispute_event(
+    para_id: u32,
+    query_id: Vec<u8>,
+    timestamp: u64,
+    reporter: &[u8; 20],
+) {
+    let event = Event {
+        name: "NewParachainDispute".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_queryId".to_string(),
+                kind: ParamType::FixedBytes(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_timestamp".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+            EventParam {
+                name: "_reporter".to_string(),
+                kind: ParamType::Address,
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: GOVERNANCE_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Uint(para_id.into()),
+                    Token::FixedBytes(query_id),
+                    Token::Uint(timestamp.into()),
+                    Token::Address(reporter.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}

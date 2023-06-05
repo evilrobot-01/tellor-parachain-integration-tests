@@ -2,7 +2,7 @@ use super::*;
 use frame_support::assert_ok;
 use moonbase_runtime::{
     asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, EVMConfig,
-    GenesisAccount, Precompiles, Runtime, RuntimeOrigin, System, EVM,
+    GenesisAccount, Precompiles, Runtime, RuntimeEvent, RuntimeOrigin, System, EVM,
 };
 use sp_runtime::app_crypto::sp_core::bytes::from_hex;
 use sp_runtime::app_crypto::sp_core::H160;
@@ -17,6 +17,13 @@ pub(crate) const ALITH: [u8; 20] = [
 pub(crate) const BALTHAZAR: [u8; 20] = [
     60, 208, 167, 5, 162, 220, 101, 229, 177, 225, 32, 88, 150, 186, 162, 190, 138, 7, 198, 224,
 ];
+pub(crate) const CHARLETH: [u8; 20] = [
+    121, 141, 75, 169, 186, 240, 6, 78, 193, 158, 180, 240, 161, 164, 87, 133, 174, 157, 109, 252,
+];
+pub(crate) const DOROTHY: [u8; 20] = [
+    119, 53, 57, 212, 172, 14, 120, 98, 51, 217, 10, 35, 54, 84, 204, 238, 38, 166, 19, 217,
+];
+
 const INITIAL_EVM_BALANCE: u128 = 100 * 10u128.saturating_pow(18);
 pub(crate) const PALLET_DERIVATIVE_ACCOUNT: [u8; 20] = [
     42, 161, 229, 255, 198, 29, 21, 138, 248, 84, 250, 40, 179, 31, 184, 119, 34, 232, 59, 100,
@@ -84,7 +91,15 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
         .unwrap();
 
     let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| System::set_block_number(1));
+    ext.execute_with(|| {
+        System::set_block_number(1);
+        pallet_timestamp::Now::<Runtime>::put(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Current time is always after unix epoch; qed")
+                .as_millis() as u64,
+        );
+    });
     ext
 }
 

@@ -1,6 +1,7 @@
 use super::*;
-use ethabi::{encode, Event, EventParam, Hash, ParamType, Token};
+use ethabi::{encode, Event, EventParam, ParamType, Token};
 use frame_support::assert_ok;
+use pallet_evm::{ExitReason::Succeed, ExitSucceed::Stopped};
 use sp_runtime::app_crypto::sp_core::U256;
 
 pub(crate) mod governance;

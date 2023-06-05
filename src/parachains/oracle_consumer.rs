@@ -1,10 +1,12 @@
 use super::*;
 use crate::relay_chain::*;
-use frame_support::assert_ok;
-use oracle_consumer_runtime::{Runtime, RuntimeOrigin, System, Tellor};
-use std::time::{SystemTime, UNIX_EPOCH};
+use frame_support::traits::UnixTime;
+use frame_support::{assert_ok, BoundedVec};
+use oracle_consumer_runtime::{Runtime, RuntimeOrigin, System, Tellor, Timestamp};
+use sp_runtime::traits::{Hash, Keccak256};
+use sp_runtime::AccountId32;
 
-const INITIAL_BALANCE: u128 = 1_000_000_000_000;
+const INITIAL_BALANCE: u128 = 1_000 * 10u128.pow(12);
 const PALLET_ACCOUNT: [u8; 32] = [
     109, 111, 100, 108, 112, 121, 47, 116, 101, 108, 108, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -29,6 +31,7 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
             (ALICE, INITIAL_BALANCE),
+            (DAVE, INITIAL_BALANCE), // required for disputes
             (PALLET_ACCOUNT.into(), INITIAL_BALANCE),
         ],
     }
@@ -68,4 +71,39 @@ pub(crate) fn register(evm_para_id: u32) {
         }
         .into(),
     );
+}
+
+pub(crate) fn submit_value(
+    reporter: AccountId32,
+    query_data: &[u8],
+    value: &[u8],
+) -> (tellor::QueryId, tellor::Timestamp) {
+    type QueryData = BoundedVec<u8, <Runtime as tellor::Config>::MaxQueryDataLength>;
+    type Value = BoundedVec<u8, <Runtime as tellor::Config>::MaxValueLength>;
+
+    let query_data: QueryData = query_data.to_vec().try_into().unwrap();
+    let query_id = Keccak256::hash(query_data.as_slice());
+    let value: Value = value.to_vec().try_into().unwrap();
+    let nonce = 0;
+    let timestamp = <Timestamp as UnixTime>::now().as_secs();
+
+    assert_ok!(Tellor::submit_value(
+        RuntimeOrigin::signed(reporter),
+        query_id,
+        value.clone(),
+        nonce,
+        query_data.clone()
+    ));
+    System::assert_has_event(
+        tellor::Event::NewReport {
+            query_id,
+            time: timestamp,
+            value,
+            nonce,
+            query_data,
+            reporter: BOB,
+        }
+        .into(),
+    );
+    (query_id, timestamp)
 }

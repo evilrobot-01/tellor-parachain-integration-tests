@@ -592,3 +592,53 @@ pub(crate) fn stake(source: &[u8; 20], para_id: u32, account: Vec<u8>, amount: u
         .into(),
     );
 }
+
+pub(crate) fn assert_parachain_reporter_slashed_event(
+    para_id: u32,
+    reporter: &[u8; 20],
+    recipient: &[u8; 20],
+    slash_amount: u128,
+) {
+    let event = Event {
+        name: "ParachainReporterSlashed".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_reporter".to_string(),
+                kind: ParamType::Address,
+                indexed: false,
+            },
+            EventParam {
+                name: "_recipient".to_string(),
+                kind: ParamType::Address,
+                indexed: false,
+            },
+            EventParam {
+                name: "_slashAmount".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Uint(para_id.into()),
+                    Token::Address(reporter.into()),
+                    Token::Address(recipient.into()),
+                    Token::Uint(slash_amount.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}

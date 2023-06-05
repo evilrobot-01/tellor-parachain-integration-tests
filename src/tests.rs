@@ -1,20 +1,16 @@
 use super::*;
-use crate::{
-    parachains::evm::contracts::governance::GOVERNANCE_CONTRACT_ADDRESS,
-    parachains::evm::contracts::staking::STAKING_CONTRACT_ADDRESS,
-    parachains::evm::{BALTHAZAR, XCTRB_ADDRESS},
-    relay_chain::BOB,
+use frame_support::{assert_ok, traits::Get};
+use parachains::evm::{
+    contracts::governance::GOVERNANCE_CONTRACT_ADDRESS,
+    contracts::registry::REGISTRY_CONTRACT_ADDRESS, contracts::staking::STAKING_CONTRACT_ADDRESS,
+    BALTHAZAR, DOROTHY, PALLET_DERIVATIVE_ACCOUNT, XCTRB_ADDRESS,
 };
-use frame_support::assert_ok;
-use frame_support::traits::UnixTime;
-use oracle_consumer_runtime::Timestamp;
-use parachains::{
-    evm::contracts::registry::REGISTRY_CONTRACT_ADDRESS, evm::PALLET_DERIVATIVE_ACCOUNT,
+use relay_chain::{BOB, DAVE};
+use sp_runtime::{
+    app_crypto::sp_core::H160,
+    app_crypto::ByteArray,
+    traits::{Hash, Keccak256},
 };
-use sp_runtime::app_crypto::sp_core::H160;
-use sp_runtime::app_crypto::ByteArray;
-use sp_runtime::traits::{Hash, Keccak256};
-use sp_runtime::BoundedVec;
 use std::sync::Once;
 use xcm_emulator::TestExt;
 
@@ -40,37 +36,18 @@ fn registers() {
         parachains::evm::contracts::registry::deploy();
     });
 
-    // register oracle consumer parachain with contracts on evm parachain via xcm
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
     OracleConsumerParachain::execute_with(|| {
         parachains::oracle_consumer::register(2_000);
     });
 
-    // ensure events emitted on evm parachain
+    // ensure registry contract called on evm parachain and expected events emitted
     EvmParachain::execute_with(|| {
-        use moonbase_runtime::{RuntimeEvent, System};
-        use pallet_evm::{ExitReason::Succeed, ExitSucceed::Stopped};
-
-        assert!(System::events().iter().any(|r| matches!(
-            r.event,
-            RuntimeEvent::Ethereum(pallet_ethereum::Event::Executed {
-                from: H160(PALLET_DERIVATIVE_ACCOUNT), // parachain registry contract called via pallet derivative account on evm parachain
-                to: H160(REGISTRY_CONTRACT_ADDRESS),
-                transaction_hash: _,
-                exit_reason: Succeed(Stopped)
-            })
-        )));
+        use parachains::evm::contracts::registry;
+        // ensure registry contract called (via pallet derivative account on evm parachain)
+        registry::assert_executed(&PALLET_DERIVATIVE_ACCOUNT);
         // ensure ParachainRegistered event emitted by parachain registry contract
-        let (topics, data) = parachains::evm::contracts::registry::parachain_registered(3_000);
-        System::assert_has_event(
-            pallet_evm::Event::Log {
-                log: ethereum::Log {
-                    address: REGISTRY_CONTRACT_ADDRESS.into(),
-                    topics,
-                    data,
-                },
-            }
-            .into(),
-        );
+        registry::assert_parachain_registered_event(3_000);
     });
 }
 
@@ -109,32 +86,32 @@ fn stakes() {
     // create trb asset and deploy contracts
     EvmParachain::execute_with(|| {
         use parachains::{evm::contracts::*, evm::ALITH};
-
+        // create asset
         parachains::evm::create_xctrb_asset();
-
+        // deploy contracts
         registry::deploy();
         staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
         governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
         staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
     });
 
-    // register oracle consumer parachain with contracts on evm parachain via xcm
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
     OracleConsumerParachain::execute_with(|| {
         parachains::oracle_consumer::register(2_000);
     });
 
-    // mint, approve and stake trb for oracle consumer parachain
+    // mint, approve and stake trb in staking contract for oracle consumer parachain
     let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
     EvmParachain::execute_with(|| {
         use parachains::evm::contracts::staking;
         let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
-
         staking::mint(asset, &BALTHAZAR, amount);
         staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
         staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
     });
 
-    // ensure stake reported to pallet on oracle consumer parachain
+    // ensure stake reported to tellor pallet on oracle consumer parachain
     OracleConsumerParachain::execute_with(|| {
         use oracle_consumer_runtime::System;
         System::assert_has_event(
@@ -156,26 +133,26 @@ fn submits_value() {
     // create trb asset and deploy contracts
     EvmParachain::execute_with(|| {
         use parachains::{evm::contracts::*, evm::ALITH};
-
+        // create asset
         parachains::evm::create_xctrb_asset();
-
+        // deploy contracts
         registry::deploy();
         staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
         governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
         staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
     });
 
-    // register oracle consumer parachain with contracts on evm parachain via xcm
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
     OracleConsumerParachain::execute_with(|| {
         parachains::oracle_consumer::register(2_000);
     });
 
-    // mint, approve and stake trb for oracle consumer parachain
+    // mint, approve and stake trb in staking contract for oracle consumer parachain
     let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
     EvmParachain::execute_with(|| {
         use parachains::evm::contracts::staking;
         let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
-
         staking::mint(asset, &BALTHAZAR, amount);
         staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
         staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
@@ -183,32 +160,118 @@ fn submits_value() {
 
     // submit value to oracle
     OracleConsumerParachain::execute_with(|| {
-        use oracle_consumer_runtime::{Runtime, RuntimeOrigin, System, Tellor};
-
-        type QueryData = BoundedVec<u8, <Runtime as tellor::Config>::MaxQueryDataLength>;
-        type Value = BoundedVec<u8, <Runtime as tellor::Config>::MaxValueLength>;
-
-        let query_data: QueryData = b"hello tellor".to_vec().try_into().unwrap();
-        let query_id = Keccak256::hash(query_data.as_slice());
-        let value: Value = b"hey!".to_vec().try_into().unwrap();
-        let nonce = 0;
-        let timestamp = <Timestamp as UnixTime>::now().as_secs();
-
-        assert_ok!(Tellor::submit_value(
-            RuntimeOrigin::signed(BOB),
-            query_id,
-            value.clone(),
-            nonce,
-            query_data.clone()
-        ));
+        use oracle_consumer_runtime::System;
         System::assert_has_event(
-            tellor::Event::NewReport {
+            tellor::Event::NewStakerReported {
+                staker: BOB,
+                amount: amount.into(),
+                address: H160(BALTHAZAR),
+            }
+            .into(),
+        );
+        parachains::oracle_consumer::submit_value(BOB, b"hello tellor", b"hey!")
+    });
+}
+
+#[test]
+fn disputes_value() {
+    init_tracing();
+    Network::reset();
+
+    // create trb asset and deploy contracts
+    EvmParachain::execute_with(|| {
+        use parachains::{evm::contracts::*, evm::ALITH};
+        // create asset
+        parachains::evm::create_xctrb_asset();
+        // deploy contracts
+        registry::deploy();
+        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
+        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+        governance::init(&STAKING_CONTRACT_ADDRESS);
+    });
+
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::register(2_000);
+    });
+
+    // mint, approve and stake trb in staking contract for oracle consumer parachain
+    let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+    EvmParachain::execute_with(|| {
+        use parachains::evm::contracts::staking;
+        let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+        staking::mint(asset, &BALTHAZAR, amount);
+        staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
+        staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+    });
+
+    // submit value to oracle consumer parachain and then begin dispute of reported value
+    let (query_id, timestamp) = OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::{Runtime, RuntimeOrigin, System, Tellor};
+        // submit value
+        let (query_id, timestamp) =
+            parachains::oracle_consumer::submit_value(BOB, b"hello tellor", b"hey!");
+        // begin dispute
+        assert_ok!(Tellor::begin_dispute(
+            RuntimeOrigin::signed(DAVE),
+            query_id,
+            timestamp,
+            Some(DOROTHY.into())
+        ));
+        let dispute_id = Keccak256::hash(&ethabi::encode(&[
+            ethabi::Token::Uint(<Runtime as tellor::Config>::ParachainId::get().into()),
+            ethabi::Token::FixedBytes(query_id.0.into()),
+            ethabi::Token::Uint(timestamp.into()),
+        ]));
+        System::assert_has_event(
+            tellor::Event::NewDispute {
+                dispute_id,
                 query_id,
-                time: timestamp,
-                value,
-                nonce,
-                query_data,
+                timestamp,
                 reporter: BOB,
+            }
+            .into(),
+        );
+        System::assert_has_event(
+            tellor::Event::NewDisputeSent {
+                para_id: 2_000,
+                contract_address: GOVERNANCE_CONTRACT_ADDRESS.into(),
+            }
+            .into(),
+        );
+        (query_id, timestamp)
+    });
+
+    // ensure governance contract called and events emitted on evm parachain
+    EvmParachain::execute_with(|| {
+        use parachains::evm::*;
+        // ensure governance contract called (via pallet derivative account on evm parachain)
+        contracts::governance::assert_executed(&PALLET_DERIVATIVE_ACCOUNT);
+        // ensure ParachainReporterSlashed event emitted by parachain staking contract
+        contracts::staking::assert_parachain_reporter_slashed_event(
+            3_000,
+            &BALTHAZAR,
+            &GOVERNANCE_CONTRACT_ADDRESS,
+            amount,
+        );
+        // ensure NewParachainDispute event emitted by parachain governance contract
+        contracts::governance::assert_new_parachain_dispute_event(
+            3_000,
+            query_id.0.to_vec(),
+            timestamp,
+            &BALTHAZAR,
+        );
+    });
+
+    // ensure slash reported to tellor pallet on oracle consumer parachain
+    OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::System;
+        System::assert_has_event(
+            tellor::Event::SlashReported {
+                reporter: BOB,
+                amount: amount.into(),
             }
             .into(),
         );
