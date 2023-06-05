@@ -24,7 +24,6 @@ pub(crate) const PALLET_DERIVATIVE_ACCOUNT: [u8; 20] = [
 pub(crate) const XCTRB_ADDRESS: [u8; 20] = [
     255, 255, 255, 255, 200, 190, 87, 122, 39, 148, 132, 67, 27, 148, 68, 104, 126, 195, 210, 174,
 ];
-
 const OCP_SOVEREIGN_ACCOUNT: [u8; 20] = [
     115, 105, 98, 108, 184, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
@@ -56,11 +55,10 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     .assimilate_storage(&mut t)
     .unwrap();
 
-    // https://github.com/PureStake/moonbeam/blob/a814fcf36a67f0f14f40afcd7d12fd4f3c5e775b/node/service/src/chain_spec/moonbase.rs#L249
+    // set precompiles revert bytecode: https://github.com/PureStake/moonbeam/blob/a814fcf36a67f0f14f40afcd7d12fd4f3c5e775b/node/service/src/chain_spec/moonbase.rs#L249
     let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
     let evm_config = EVMConfig {
-        // We need _some_ code inserted at the precompile address so that
-        // the evm will actually call the address.
+        // We need _some_ code inserted at the precompile address so evm will actually call the address
         accounts: Precompiles::used_addresses()
             .map(|addr| {
                 (
@@ -78,6 +76,7 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     <pallet_evm::GenesisConfig as GenesisBuild<Runtime>>::assimilate_storage(&evm_config, &mut t)
         .unwrap();
 
+    // set xcm version
     let xcm_config = moonbase_runtime::PolkadotXcmConfig {
         safe_xcm_version: Some(3),
     };
@@ -89,7 +88,7 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     ext
 }
 
-pub(crate) fn create_xctrb() {
+pub(crate) fn create_xctrb_asset() {
     let asset = AssetType::Xcm(MultiLocation {
         parents: 1,
         interior: Junctions::X3(Parachain(1_000), PalletInstance(50), GeneralIndex(872)),

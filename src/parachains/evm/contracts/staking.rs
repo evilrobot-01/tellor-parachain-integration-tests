@@ -456,9 +456,6 @@ const CONTRACT_BYTECODE: [u8; 9994] = [
 ];
 
 pub(crate) fn deploy(registry: &[u8; 20], token: &[u8; 20]) {
-    let gas_limit = 10_000_000;
-    let max_fee_per_gas = U256::from(1_250_000_000);
-
     // use contract bytecode + constructor parameters
     let mut init = CONTRACT_BYTECODE.to_vec();
     init.append(
@@ -475,8 +472,8 @@ pub(crate) fn deploy(registry: &[u8; 20], token: &[u8; 20]) {
         ALITH.into(),
         init,
         U256::zero(),
-        gas_limit,
-        max_fee_per_gas,
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
         None,
         None,
         Vec::new()
@@ -490,9 +487,6 @@ pub(crate) fn deploy(registry: &[u8; 20], token: &[u8; 20]) {
 }
 
 pub(crate) fn init(governance: &[u8; 20]) {
-    let gas_limit = 10_000_000;
-    let max_fee_per_gas = U256::from(1_250_000_000);
-
     #[allow(deprecated)]
     let input = Function {
         name: "init".to_string(),
@@ -515,8 +509,8 @@ pub(crate) fn init(governance: &[u8; 20]) {
         STAKING_CONTRACT_ADDRESS.into(),
         input,
         U256::zero(),
-        gas_limit,
-        max_fee_per_gas,
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
         None,
         None,
         Vec::new()
@@ -547,9 +541,6 @@ pub(crate) fn mint(asset: u128, who: &[u8; 20], amount: u128) {
 }
 
 pub(crate) fn stake(source: &[u8; 20], para_id: u32, account: Vec<u8>, amount: u128) {
-    let gas_limit = 10_000_000;
-    let max_fee_per_gas = U256::from(1_250_000_000);
-
     #[allow(deprecated)]
     let input = Function {
         name: "depositParachainStake".to_string(),
@@ -588,8 +579,8 @@ pub(crate) fn stake(source: &[u8; 20], para_id: u32, account: Vec<u8>, amount: u
         STAKING_CONTRACT_ADDRESS.into(),
         input,
         U256::zero(),
-        gas_limit,
-        max_fee_per_gas,
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
         None,
         None,
         Vec::new()

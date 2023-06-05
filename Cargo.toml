@@ -16,6 +16,7 @@ xcm-emulator = { git = "https://github.com/shaunxw/xcm-simulator", rev = "bea35c
 frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.40" }
 frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.40" }
 pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.40" }
+pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.40" }
 sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.40" }
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.40" }
 

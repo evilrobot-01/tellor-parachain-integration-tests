@@ -246,17 +246,14 @@ pub(crate) fn parachain_registered(parachain: u32) -> (Vec<Hash>, Vec<u8>) {
 }
 
 pub(crate) fn deploy() {
-    let gas_limit = 10_000_000;
-    let max_fee_per_gas = U256::from(1_250_000_000);
-
     // create parachain registry contract
     assert_ok!(EVM::create(
         RuntimeOrigin::root(),
         ALITH.into(),
         CONTRACT_BYTECODE.into(),
         U256::zero(),
-        gas_limit,
-        max_fee_per_gas,
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
         None,
         None,
         Vec::new()
