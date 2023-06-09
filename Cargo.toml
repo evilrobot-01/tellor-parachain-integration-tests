@@ -21,7 +21,7 @@ sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0
 sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.40" }
 
 # Cumulus
-cumulus-primitives-core = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.41" }
+cumulus-primitives-core = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.40" }
 parachain-info = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.40" }
 
 # Polkadot
@@ -80,5 +80,4 @@ xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.4
 
 # Patch Tellor
 [patch."https://github.com/tellor-io/tellor-pallet"]
-tellor-runtime-api = { path = "../tellor-pallet/runtime-api"}
-tellor = { path = "../tellor-pallet"}
+tellor = { git = "https://github.com/evilrobot-01/tellor-pallet", branch = "frank/update_deps" }
