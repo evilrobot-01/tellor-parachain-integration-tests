@@ -7,4 +7,4 @@ RUN SKIP_WASM_BUILD=1 cargo build --tests --release;  \
 
 FROM rust:slim
 COPY --from=builder /tests/tellor-parachain-integration-tests .
-ENTRYPOINT ./tellor-parachain-integration-tests
+ENTRYPOINT ["./tellor-parachain-integration-tests"]
