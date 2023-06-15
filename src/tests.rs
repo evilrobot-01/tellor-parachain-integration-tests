@@ -13,7 +13,7 @@ use sp_runtime::{
     traits::{Hash, Keccak256},
 };
 use std::sync::Once;
-use tellor::{DAYS, HOURS, MINUTES};
+use tellor::{VoteResult, DAYS, HOURS, MINUTES};
 use xcm_emulator::TestExt;
 
 static INIT: Once = Once::new();
@@ -498,7 +498,7 @@ fn on_initialize_hook_on_consumer_parachain_sends_votes_to_evm_parachain() {
         use parachains::evm::*;
         // ensure governance contract called (via pallet derivative account on evm parachain)
         contracts::governance::assert_executed(&PALLET_DERIVATIVE_ACCOUNT);
-        // // ensure ParachainVoted event emitted by parachain governance contract
+        // ensure ParachainVoted event emitted by parachain governance contract
         contracts::governance::assert_parachain_voted_event(dispute_id, tip, 0, 0, 0, 1, 0);
     });
 }
@@ -590,8 +590,130 @@ fn send_votes_from_consumer_parachain_to_evm_parachain_works() {
         use parachains::evm::*;
         // ensure governance contract called (via pallet derivative account on evm parachain)
         contracts::governance::assert_executed(&PALLET_DERIVATIVE_ACCOUNT);
-        // // ensure ParachainVoted event emitted by parachain governance contract
+        // ensure ParachainVoted event emitted by parachain governance contract
         contracts::governance::assert_parachain_voted_event(dispute_id, tip, 0, 0, 0, 1, 0);
+    });
+}
+
+#[test]
+fn tally_votes_on_evm_parachain_reports_to_consumer_parachain() {
+    init_tracing();
+    Network::reset();
+
+    // create trb asset and deploy contracts
+    EvmParachain::execute_with(|| {
+        use parachains::{evm::contracts::*, evm::ALITH};
+        // create asset
+        parachains::evm::create_xctrb_asset();
+        // deploy contracts
+        registry::deploy();
+        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
+        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+        governance::init(&STAKING_CONTRACT_ADDRESS);
+    });
+
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::register(2_000);
+    });
+
+    // mint, approve and stake trb in staking contract for oracle consumer parachain
+    let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+    EvmParachain::execute_with(|| {
+        use parachains::evm::contracts::staking;
+        let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+        staking::mint(asset, &BALTHAZAR, amount);
+        staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
+        staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+    });
+
+    // create tip to be able to have vote counted as user
+    let tip = 1_000_000_000_000;
+    let query_data = b"hello tellor";
+    OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::{RuntimeOrigin, Tellor};
+        assert_ok!(Tellor::tip(
+            RuntimeOrigin::signed(DAVE),
+            Keccak256::hash(query_data.as_slice()),
+            tip,
+            query_data.to_vec().try_into().unwrap()
+        ));
+    });
+
+    // submit value to oracle consumer parachain, begin dispute and cast votes
+    let dispute_id = OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::{Runtime, RuntimeOrigin, Tellor};
+        // submit value
+        let (query_id, timestamp) =
+            parachains::oracle_consumer::submit_value(BOB, query_data, b"hey!");
+        // begin dispute
+        assert_ok!(Tellor::begin_dispute(
+            RuntimeOrigin::signed(DAVE),
+            query_id,
+            timestamp,
+            Some(DOROTHY.into())
+        ));
+        let dispute_id = Keccak256::hash(&ethabi::encode(&[
+            ethabi::Token::Uint(<Runtime as tellor::Config>::ParachainId::get().into()),
+            ethabi::Token::FixedBytes(query_id.0.into()),
+            ethabi::Token::Uint(timestamp.into()),
+        ]));
+        // cast votes
+        assert_ok!(Tellor::vote(
+            RuntimeOrigin::signed(DAVE),
+            dispute_id,
+            Some(true) // for
+        ));
+        assert_ok!(Tellor::vote(
+            RuntimeOrigin::signed(BOB),
+            dispute_id,
+            Some(false) // against
+        ));
+        dispute_id
+    });
+
+    // advance time until parachain voting cut-off
+    EvmParachain::execute_with(|| parachains::evm::advance_time((11 * HOURS) + 1));
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::advance_time((11 * HOURS) + 1);
+        // send votes via on_initialize hook
+        Tellor::on_initialize(0)
+    });
+
+    // advance time until voting cut-off
+    EvmParachain::execute_with(|| parachains::evm::advance_time((1 * DAYS) + 1));
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::advance_time((1 * DAYS) + 1);
+        // send votes via on_initialize hook
+        Tellor::on_initialize(0)
+    });
+
+    // tally votes on evm parachain
+    EvmParachain::execute_with(|| {
+        use parachains::evm::*;
+        contracts::governance::tally_votes(&ALITH, dispute_id);
+        contracts::governance::assert_vote_tallied_event(
+            dispute_id,
+            VoteResult::Invalid as u8,
+            &DOROTHY,
+            &BALTHAZAR,
+        );
+    });
+
+    // ensure tally reported to tellor pallet on oracle consumer parachain
+    OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::System;
+        System::assert_has_event(
+            tellor::Event::VoteTallied {
+                dispute_id,
+                result: VoteResult::Invalid,
+                initiator: DAVE,
+                reporter: BOB,
+            }
+            .into(),
+        );
     });
 }
 
