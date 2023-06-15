@@ -1,5 +1,5 @@
 use super::*;
-use ethabi::{Function, Param};
+use ethabi::{ethereum_types::H256, Function, Param};
 
 pub(crate) const GOVERNANCE_CONTRACT_ADDRESS: [u8; 20] = [
     62, 214, 33, 55, 197, 219, 146, 124, 177, 55, 194, 100, 85, 150, 145, 22, 191, 12, 35, 203,
@@ -623,6 +623,77 @@ pub(crate) fn assert_new_parachain_dispute_event(
                     Token::FixedBytes(query_id),
                     Token::Uint(timestamp.into()),
                     Token::Address(reporter.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_parachain_voted_event(
+    dispute_id: H256,
+    total_tips_for: impl Into<U256>,
+    total_tips_against: impl Into<U256>,
+    total_tips_invalid: impl Into<U256>,
+    total_reports_for: impl Into<U256>,
+    total_reports_against: impl Into<U256>,
+    total_reports_invalid: impl Into<U256>,
+) {
+    let event = Event {
+        name: "ParachainVoted".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_disputeId".to_string(),
+                kind: ParamType::FixedBytes(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_totalTipsFor".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+            EventParam {
+                name: "_totalTipsAgainst".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+            EventParam {
+                name: "_totalTipsInvalid".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+            EventParam {
+                name: "_totalReportsFor".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+            EventParam {
+                name: "_totalReportsAgainst".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+            EventParam {
+                name: "_totalReportsInvalid".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: GOVERNANCE_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::FixedBytes(dispute_id.0.to_vec()),
+                    Token::Uint(total_tips_for.into()),
+                    Token::Uint(total_tips_against.into()),
+                    Token::Uint(total_tips_invalid.into()),
+                    Token::Uint(total_reports_for.into()),
+                    Token::Uint(total_reports_against.into()),
+                    Token::Uint(total_reports_invalid.into()),
                 ]),
             },
         }
