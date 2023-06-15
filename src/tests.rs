@@ -47,7 +47,7 @@ fn deploying_contracts_to_evm_parachain_works() {
 }
 
 #[test]
-fn registering_consumer_parachain_with_contracts_on_evm_parachain_works() {
+fn register_on_consumer_parachain_registers_with_contracts_on_evm_parachain() {
     init_tracing();
     Network::reset();
 
@@ -81,7 +81,7 @@ fn creating_xctrb_on_evm_parachain_works() {
 }
 
 #[test]
-fn depositing_stake_on_evm_parachain_reports_to_consumer_parachain() {
+fn deposit_stake_on_evm_parachain_reports_to_consumer_parachain() {
     init_tracing();
     Network::reset();
 
@@ -131,7 +131,7 @@ fn depositing_stake_on_evm_parachain_reports_to_consumer_parachain() {
 }
 
 #[test]
-fn requesting_stake_withdrawal_on_evm_parachain_reports_request_to_consumer_parachain() {
+fn requesting_stake_withdraw_on_evm_parachain_reports_to_consumer_parachain() {
     init_tracing();
     Network::reset();
 
@@ -198,7 +198,7 @@ fn requesting_stake_withdrawal_on_evm_parachain_reports_request_to_consumer_para
 }
 
 #[test]
-fn withdrawing_stake_on_evm_parachain_reports_to_consumer_parachain() {
+fn withdraw_stake_on_evm_parachain_reports_to_consumer_parachain() {
     init_tracing();
     Network::reset();
 
@@ -256,7 +256,7 @@ fn withdrawing_stake_on_evm_parachain_reports_to_consumer_parachain() {
 }
 
 #[test]
-fn submitting_value_to_consumer_parachain_after_staking_works() {
+fn submit_value_to_consumer_parachain_after_staking_works() {
     init_tracing();
     Network::reset();
 
@@ -304,7 +304,7 @@ fn submitting_value_to_consumer_parachain_after_staking_works() {
 }
 
 #[test]
-fn disputing_value_on_consumer_parachain_begins_dispute_on_evm_parachain() {
+fn begin_dispute_on_consumer_parachain_begins_dispute_on_evm_parachain() {
     init_tracing();
     Network::reset();
 
@@ -409,7 +409,7 @@ fn disputing_value_on_consumer_parachain_begins_dispute_on_evm_parachain() {
 }
 
 #[test]
-fn dispute_votes_on_consumer_parachain_sent_to_evm_parachain_via_hook() {
+fn on_initialize_hook_on_consumer_parachain_sends_votes_to_evm_parachain() {
     init_tracing();
     Network::reset();
 
@@ -504,7 +504,7 @@ fn dispute_votes_on_consumer_parachain_sent_to_evm_parachain_via_hook() {
 }
 
 #[test]
-fn dispute_votes_on_consumer_parachain_sent_to_evm_parachain_via_extrinsic() {
+fn send_votes_from_consumer_parachain_to_evm_parachain_works() {
     init_tracing();
     Network::reset();
 
