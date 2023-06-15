@@ -79,7 +79,7 @@ fn creating_xctrb_on_evm_parachain_works() {
 }
 
 #[test]
-fn staking_xctrb_on_evm_parachain_reports_stake_to_consumer_parachain() {
+fn staking_on_evm_parachain_reports_stake_to_consumer_parachain() {
     init_tracing();
     Network::reset();
 
@@ -108,7 +108,10 @@ fn staking_xctrb_on_evm_parachain_reports_stake_to_consumer_parachain() {
         let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
         staking::mint(asset, &BALTHAZAR, amount);
         staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
-        staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        // deposit stake
+        staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        staking::assert_new_staker_event(&BALTHAZAR, amount);
+        staking::assert_new_parachain_staker_event(3_000, &BALTHAZAR, BOB.to_raw_vec(), amount);
     });
 
     // ensure stake reported to tellor pallet on oracle consumer parachain
@@ -119,6 +122,57 @@ fn staking_xctrb_on_evm_parachain_reports_stake_to_consumer_parachain() {
                 staker: BOB,
                 amount: amount.into(),
                 address: H160(BALTHAZAR),
+            }
+            .into(),
+        );
+    });
+}
+
+#[test]
+fn requesting_stake_withdrawal_on_evm_parachain_reports_request_to_consumer_parachain() {
+    init_tracing();
+    Network::reset();
+
+    // create trb asset and deploy contracts
+    EvmParachain::execute_with(|| {
+        use parachains::{evm::contracts::*, evm::ALITH};
+        // create asset
+        parachains::evm::create_xctrb_asset();
+        // deploy contracts
+        registry::deploy();
+        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
+        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+    });
+
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::register(2_000);
+    });
+
+    // mint, approve, stake trb and request withdrawal from staking contract for oracle consumer parachain
+    let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+    EvmParachain::execute_with(|| {
+        use parachains::evm::contracts::staking;
+        let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+        staking::mint(asset, &BALTHAZAR, amount);
+        staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
+        staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        // request withdraw
+        staking::request_parachain_stake_withdraw(&BALTHAZAR, 3_000, amount);
+        staking::assert_stake_withdraw_requested_event(&BALTHAZAR, amount);
+        staking::assert_parachain_stake_withdraw_requested_event(3_000, BOB.to_raw_vec(), amount);
+    });
+
+    // ensure stake withdraw request reported to tellor pallet on oracle consumer parachain
+    OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::System;
+        System::assert_has_event(
+            tellor::Event::StakeWithdrawRequestReported {
+                reporter: BOB,
+                amount: amount.into(),
+                address: BALTHAZAR.into(),
             }
             .into(),
         );
@@ -155,7 +209,7 @@ fn submitting_value_to_consumer_parachain_after_staking_works() {
         let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
         staking::mint(asset, &BALTHAZAR, amount);
         staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
-        staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
     });
 
     // submit value to oracle
@@ -204,7 +258,7 @@ fn disputing_value_on_consumer_parachain_begins_dispute_on_evm_parachain() {
         let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
         staking::mint(asset, &BALTHAZAR, amount);
         staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
-        staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
     });
 
     // submit value to oracle consumer parachain and then begin dispute of reported value
@@ -309,7 +363,7 @@ fn using_tellor_sample_works() {
         let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
         staking::mint(asset, &BALTHAZAR, amount);
         staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
-        staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
     });
 
     // submit price to oracle which is then used via using-tellor sample pallet to do something

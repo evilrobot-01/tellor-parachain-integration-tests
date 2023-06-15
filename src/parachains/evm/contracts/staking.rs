@@ -1,4 +1,5 @@
 use super::*;
+use ethabi::ethereum_types::H256;
 use ethabi::{Function, Param};
 use moonbase_runtime::Assets;
 
@@ -540,7 +541,12 @@ pub(crate) fn mint(asset: u128, who: &[u8; 20], amount: u128) {
     //todo: assert event
 }
 
-pub(crate) fn stake(source: &[u8; 20], para_id: u32, account: Vec<u8>, amount: u128) {
+pub(crate) fn deposit_parachain_stake(
+    source: &[u8; 20],
+    para_id: u32,
+    account: Vec<u8>,
+    amount: u128,
+) {
     #[allow(deprecated)]
     let input = Function {
         name: "depositParachainStake".to_string(),
@@ -572,7 +578,7 @@ pub(crate) fn stake(source: &[u8; 20], para_id: u32, account: Vec<u8>, amount: u
     ])
     .unwrap();
 
-    // init parachain staking contract
+    // call parachain staking contract
     assert_ok!(EVM::call(
         RuntimeOrigin::root(),
         source.into(),
@@ -588,6 +594,148 @@ pub(crate) fn stake(source: &[u8; 20], para_id: u32, account: Vec<u8>, amount: u
     System::assert_has_event(
         pallet_evm::Event::Executed {
             address: H160(STAKING_CONTRACT_ADDRESS),
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn request_parachain_stake_withdraw(source: &[u8; 20], para_id: u32, amount: u128) {
+    #[allow(deprecated)]
+    let input = Function {
+        name: "requestParachainStakeWithdraw".to_string(),
+        inputs: vec![
+            Param {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                internal_type: None,
+            },
+            Param {
+                name: "_amount".to_string(),
+                kind: ParamType::Uint(256),
+                internal_type: None,
+            },
+        ],
+        outputs: vec![],
+        constant: None,
+        state_mutability: Default::default(),
+    }
+    .encode_input(&vec![
+        Token::Uint(para_id.into()),
+        Token::Uint(amount.into()),
+    ])
+    .unwrap();
+
+    // call parachain staking contract
+    assert_ok!(EVM::call(
+        RuntimeOrigin::root(),
+        source.into(),
+        STAKING_CONTRACT_ADDRESS.into(),
+        input,
+        U256::zero(),
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
+        None,
+        None,
+        Vec::new()
+    ));
+    System::assert_has_event(
+        pallet_evm::Event::Executed {
+            address: H160(STAKING_CONTRACT_ADDRESS),
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_new_staker_event(staker: &[u8; 20], amount: u128) {
+    let event = Event {
+        name: "NewStaker".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_staker".to_string(),
+                kind: ParamType::Address,
+                indexed: true,
+            },
+            EventParam {
+                name: "_amount".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: true,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![
+                    event.signature(),
+                    {
+                        let mut topic = [0u8; 32];
+                        topic[12..].clone_from_slice(staker);
+                        topic
+                    }
+                    .into(),
+                    {
+                        let topic: [u8; 32] = encode(&vec![Token::Uint(amount.into())])
+                            .try_into()
+                            .unwrap();
+                        topic
+                    }
+                    .into(),
+                ],
+                data: Default::default(),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_new_parachain_staker_event(
+    para_id: u32,
+    staker: &[u8; 20],
+    account: Vec<u8>,
+    amount: u128,
+) {
+    let event = Event {
+        name: "NewParachainStaker".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_staker".to_string(),
+                kind: ParamType::Address,
+                indexed: false,
+            },
+            EventParam {
+                name: "_account".to_string(),
+                kind: ParamType::Bytes,
+                indexed: false,
+            },
+            EventParam {
+                name: "_amount".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Uint(para_id.into()),
+                    Token::Address(staker.into()),
+                    Token::Bytes(account),
+                    Token::Uint(amount.into()),
+                ]),
+            },
         }
         .into(),
     );
@@ -636,6 +784,82 @@ pub(crate) fn assert_parachain_reporter_slashed_event(
                     Token::Address(reporter.into()),
                     Token::Address(recipient.into()),
                     Token::Uint(slash_amount.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_stake_withdraw_requested_event(staker: &[u8; 20], amount: u128) {
+    let event = Event {
+        name: "StakeWithdrawRequested".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_staker".to_string(),
+                kind: ParamType::Address,
+                indexed: false,
+            },
+            EventParam {
+                name: "_amount".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Address(staker.into()),
+                    Token::Uint(amount.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_parachain_stake_withdraw_requested_event(
+    para_id: u32,
+    account: Vec<u8>,
+    amount: u128,
+) {
+    let event = Event {
+        name: "ParachainStakeWithdrawRequested".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_account".to_string(),
+                kind: ParamType::Bytes,
+                indexed: false,
+            },
+            EventParam {
+                name: "_amount".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Uint(para_id.into()),
+                    Token::Bytes(account),
+                    Token::Uint(amount.into()),
                 ]),
             },
         }
