@@ -27,7 +27,25 @@ fn init_tracing() {
 }
 
 #[test]
-fn registers() {
+fn deploying_contracts_to_evm_parachain_works() {
+    init_tracing();
+    Network::reset();
+
+    // deploy and init contracts
+    EvmParachain::execute_with(|| {
+        use parachains::{evm::contracts::*, evm::ALITH};
+        // deploy contracts
+        registry::deploy();
+        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
+        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+        governance::init(&STAKING_CONTRACT_ADDRESS);
+    });
+}
+
+#[test]
+fn registering_consumer_parachain_with_contracts_on_evm_parachain_works() {
     init_tracing();
     Network::reset();
 
@@ -52,34 +70,16 @@ fn registers() {
 }
 
 #[test]
-fn deploys_contracts() {
+fn creating_xctrb_on_evm_parachain_works() {
     init_tracing();
     Network::reset();
 
-    // deploy and init contracts
-    EvmParachain::execute_with(|| {
-        use parachains::{evm::contracts::*, evm::ALITH};
-        // deploy contracts
-        registry::deploy();
-        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
-        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
-        // init contracts with addresses
-        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
-        governance::init(&STAKING_CONTRACT_ADDRESS);
-    });
-}
-
-#[test]
-fn creates_xctrb_asset() {
-    init_tracing();
-    Network::reset();
-
-    // register TRB as foreign asset
+    // create TRB as foreign asset
     EvmParachain::execute_with(|| parachains::evm::create_xctrb_asset());
 }
 
 #[test]
-fn stakes() {
+fn staking_xctrb_on_evm_parachain_reports_stake_to_consumer_parachain() {
     init_tracing();
     Network::reset();
 
@@ -126,7 +126,7 @@ fn stakes() {
 }
 
 #[test]
-fn submits_value() {
+fn submitting_value_to_consumer_parachain_after_staking_works() {
     init_tracing();
     Network::reset();
 
@@ -174,7 +174,7 @@ fn submits_value() {
 }
 
 #[test]
-fn disputes_value() {
+fn disputing_value_on_consumer_parachain_begins_dispute_on_evm_parachain() {
     init_tracing();
     Network::reset();
 
