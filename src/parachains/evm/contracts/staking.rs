@@ -1,5 +1,4 @@
 use super::*;
-use ethabi::ethereum_types::H256;
 use ethabi::{Function, Param};
 use moonbase_runtime::Assets;
 
@@ -646,6 +645,25 @@ pub(crate) fn request_parachain_stake_withdraw(source: &[u8; 20], para_id: u32, 
     );
 }
 
+pub(crate) fn assert_executed(caller: &[u8; 20]) {
+    assert!(System::events().iter().any(|r| {
+        match &r.event {
+            RuntimeEvent::Ethereum(pallet_ethereum::Event::Executed {
+                from,
+                to,
+                exit_reason,
+                ..
+            }) if from == &caller.into()
+                && to == &STAKING_CONTRACT_ADDRESS.into()
+                && *exit_reason == Succeed(Stopped) =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }));
+}
+
 pub(crate) fn assert_new_staker_event(staker: &[u8; 20], amount: u128) {
     let event = Event {
         name: "NewStaker".to_string(),
@@ -784,6 +802,49 @@ pub(crate) fn assert_parachain_reporter_slashed_event(
                     Token::Address(reporter.into()),
                     Token::Address(recipient.into()),
                     Token::Uint(slash_amount.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_parachain_stake_withdraw_request_confirmed_event(
+    para_id: u32,
+    staker: &[u8; 20],
+    amount: u128,
+) {
+    let event = Event {
+        name: "ParachainStakeWithdrawRequestConfirmed".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_staker".to_string(),
+                kind: ParamType::Address,
+                indexed: false,
+            },
+            EventParam {
+                name: "_amount".to_string(),
+                kind: ParamType::Uint(256),
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Uint(para_id.into()),
+                    Token::Address(staker.into()),
+                    Token::Uint(amount.into()),
                 ]),
             },
         }

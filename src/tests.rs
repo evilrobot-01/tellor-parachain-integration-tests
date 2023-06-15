@@ -176,6 +176,23 @@ fn requesting_stake_withdrawal_on_evm_parachain_reports_request_to_consumer_para
             }
             .into(),
         );
+        System::assert_has_event(
+            tellor::Event::StakeWithdrawRequestConfirmationSent {
+                para_id: 2_000,
+                contract_address: STAKING_CONTRACT_ADDRESS.into(),
+            }
+            .into(),
+        );
+    });
+
+    // ensure staking withdraw request confirmed
+    // mint, approve, stake trb and request withdrawal from staking contract for oracle consumer parachain
+    let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+    EvmParachain::execute_with(|| {
+        use parachains::evm::contracts::staking;
+        // ensure staking contract called (via pallet derivative account on evm parachain)
+        staking::assert_executed(&PALLET_DERIVATIVE_ACCOUNT);
+        staking::assert_parachain_stake_withdraw_request_confirmed_event(3_000, &BALTHAZAR, amount);
     });
 }
 
