@@ -219,7 +219,7 @@ fn withdrawing_stake_on_evm_parachain_reports_to_consumer_parachain() {
         parachains::oracle_consumer::register(2_000);
     });
 
-    // mint, approve, stake trb and withdraw from staking contract for oracle consumer parachain
+    // mint, approve, stake trb and request withdrawal from staking contract for oracle consumer parachain
     let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
     EvmParachain::execute_with(|| {
         use parachains::evm::contracts::staking;
@@ -233,17 +233,15 @@ fn withdrawing_stake_on_evm_parachain_reports_to_consumer_parachain() {
         staking::assert_parachain_stake_withdraw_requested_event(3_000, BOB.to_raw_vec(), amount);
     });
 
-    // advance time beyond lock period
-    EvmParachain::execute_with(|| {
-        parachains::evm::advance_time((7 * DAYS) + 1);
-    });
+    // advance time beyond lock period on both parachains
+    EvmParachain::execute_with(|| parachains::evm::advance_time((7 * DAYS) + 1));
     OracleConsumerParachain::execute_with(|| {
-        parachains::oracle_consumer::advance_time((7 * DAYS) + 1);
+        parachains::oracle_consumer::advance_time((7 * DAYS) + 1)
     });
 
+    // withdraw stake from staking contract for oracle consumer parachain
     EvmParachain::execute_with(|| {
         use parachains::evm::contracts::staking;
-        // withdraw stake
         staking::withdraw_parachain_stake(&BALTHAZAR, 3_000);
         staking::assert_stake_withdrawn_event(&BALTHAZAR);
         staking::assert_parachain_stake_withdrawn_event(3_000, &BALTHAZAR);
