@@ -79,7 +79,7 @@ fn creating_xctrb_on_evm_parachain_works() {
 }
 
 #[test]
-fn staking_on_evm_parachain_reports_stake_to_consumer_parachain() {
+fn depositing_stake_on_evm_parachain_reports_to_consumer_parachain() {
     init_tracing();
     Network::reset();
 
