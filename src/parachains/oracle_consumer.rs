@@ -1,5 +1,6 @@
 use super::*;
 use crate::relay_chain::*;
+use core::time::Duration;
 use frame_support::traits::UnixTime;
 use frame_support::{assert_ok, BoundedVec};
 use oracle_consumer_runtime::{Runtime, RuntimeOrigin, System, Tellor, Timestamp};
@@ -106,4 +107,11 @@ pub(crate) fn submit_value(
         .into(),
     );
     (query_id, timestamp)
+}
+
+pub(crate) fn advance_time(time_in_secs: u64) {
+    let now = <Timestamp as UnixTime>::now();
+    pallet_timestamp::Now::<Runtime>::set(
+        (now + Duration::from_secs(time_in_secs)).as_millis() as u64
+    );
 }

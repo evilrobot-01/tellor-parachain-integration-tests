@@ -5,7 +5,7 @@ use parachains::evm::{
     contracts::registry::REGISTRY_CONTRACT_ADDRESS, contracts::staking::STAKING_CONTRACT_ADDRESS,
     BALTHAZAR, DOROTHY, PALLET_DERIVATIVE_ACCOUNT, XCTRB_ADDRESS,
 };
-use relay_chain::{BOB, DAVE};
+use relay_chain::{BOB, CHARLIE, DAVE};
 use sp_runtime::{
     app_crypto::sp_core::H160,
     app_crypto::ByteArray,
@@ -272,6 +272,77 @@ fn disputes_value() {
             tellor::Event::SlashReported {
                 reporter: BOB,
                 amount: amount.into(),
+            }
+            .into(),
+        );
+    });
+}
+
+#[test]
+fn using_tellor_sample_works() {
+    use tellor::{MINUTES, U256};
+    init_tracing();
+    Network::reset();
+
+    // create trb asset and deploy contracts
+    EvmParachain::execute_with(|| {
+        use parachains::{evm::contracts::*, evm::ALITH};
+        // create asset
+        parachains::evm::create_xctrb_asset();
+        // deploy contracts
+        registry::deploy();
+        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
+        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+    });
+
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::register(2_000);
+    });
+
+    // mint, approve and stake trb in staking contract for oracle consumer parachain
+    let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+    EvmParachain::execute_with(|| {
+        use parachains::evm::contracts::staking;
+        let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+        staking::mint(asset, &BALTHAZAR, amount);
+        staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
+        staking::stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+    });
+
+    // submit price to oracle which is then used via using-tellor sample pallet to do something
+    OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::{RuntimeOrigin, System, UsingTellor};
+
+        // configure using-tellor pallet with price source
+        let query_data = b"DOT/USD";
+        let query_id = Keccak256::hash(query_data.as_slice());
+        assert_ok!(UsingTellor::configure(RuntimeOrigin::root(), query_id));
+        System::assert_has_event(::using_tellor::Event::Configured { query_id }.into());
+
+        // submit price to oracle
+        let price = U256::from((4.39 * 10u64.pow(18) as f64) as u128);
+        parachains::oracle_consumer::submit_value(
+            BOB,
+            query_data,
+            &ethabi::encode(&vec![ethabi::Token::Uint(price)]),
+        );
+
+        // advance time, as using-tellor sample uses a delayed price to allow time for disputes
+        parachains::oracle_consumer::advance_time((15 * MINUTES) + 1);
+
+        // do something using previously submitted oracle price
+        let value = U256::from(10);
+        assert_ok!(UsingTellor::do_something(
+            RuntimeOrigin::signed(CHARLIE),
+            value
+        ));
+        System::assert_last_event(
+            ::using_tellor::Event::ValueStored {
+                value: price * value,
+                who: CHARLIE,
             }
             .into(),
         );
