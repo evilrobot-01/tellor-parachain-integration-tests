@@ -186,7 +186,6 @@ fn requesting_stake_withdrawal_on_evm_parachain_reports_request_to_consumer_para
     });
 
     // ensure staking withdraw request confirmed
-    // mint, approve, stake trb and request withdrawal from staking contract for oracle consumer parachain
     let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
     EvmParachain::execute_with(|| {
         use parachains::evm::contracts::staking;
