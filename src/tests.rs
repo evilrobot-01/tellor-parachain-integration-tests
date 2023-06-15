@@ -12,6 +12,7 @@ use sp_runtime::{
     traits::{Hash, Keccak256},
 };
 use std::sync::Once;
+use tellor::DAYS;
 use xcm_emulator::TestExt;
 
 static INIT: Once = Once::new();
@@ -192,6 +193,66 @@ fn requesting_stake_withdrawal_on_evm_parachain_reports_request_to_consumer_para
         // ensure staking contract called (via pallet derivative account on evm parachain)
         staking::assert_executed(&PALLET_DERIVATIVE_ACCOUNT);
         staking::assert_parachain_stake_withdraw_request_confirmed_event(3_000, &BALTHAZAR, amount);
+    });
+}
+
+#[test]
+fn withdrawing_stake_on_evm_parachain_reports_to_consumer_parachain() {
+    init_tracing();
+    Network::reset();
+
+    // create trb asset and deploy contracts
+    EvmParachain::execute_with(|| {
+        use parachains::{evm::contracts::*, evm::ALITH};
+        // create asset
+        parachains::evm::create_xctrb_asset();
+        // deploy contracts
+        registry::deploy();
+        staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+        governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+        // init contracts with addresses
+        staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+    });
+
+    // register oracle consumer parachain with contracts on evm parachain via tellor pallet
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::register(2_000);
+    });
+
+    // mint, approve, stake trb and withdraw from staking contract for oracle consumer parachain
+    let amount = <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+    EvmParachain::execute_with(|| {
+        use parachains::evm::contracts::staking;
+        let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+        staking::mint(asset, &BALTHAZAR, amount);
+        staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
+        staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        // request withdraw
+        staking::request_parachain_stake_withdraw(&BALTHAZAR, 3_000, amount);
+        staking::assert_stake_withdraw_requested_event(&BALTHAZAR, amount);
+        staking::assert_parachain_stake_withdraw_requested_event(3_000, BOB.to_raw_vec(), amount);
+    });
+
+    // advance time beyond lock period
+    EvmParachain::execute_with(|| {
+        parachains::evm::advance_time((7 * DAYS) + 1);
+    });
+    OracleConsumerParachain::execute_with(|| {
+        parachains::oracle_consumer::advance_time((7 * DAYS) + 1);
+    });
+
+    EvmParachain::execute_with(|| {
+        use parachains::evm::contracts::staking;
+        // withdraw stake
+        staking::withdraw_parachain_stake(&BALTHAZAR, 3_000);
+        staking::assert_stake_withdrawn_event(&BALTHAZAR);
+        staking::assert_parachain_stake_withdrawn_event(3_000, &BALTHAZAR);
+    });
+
+    // ensure stake withdrawal reported to tellor pallet on oracle consumer parachain
+    OracleConsumerParachain::execute_with(|| {
+        use oracle_consumer_runtime::System;
+        System::assert_has_event(tellor::Event::StakeWithdrawnReported { staker: BOB }.into());
     });
 }
 

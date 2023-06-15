@@ -645,6 +645,43 @@ pub(crate) fn request_parachain_stake_withdraw(source: &[u8; 20], para_id: u32, 
     );
 }
 
+pub(crate) fn withdraw_parachain_stake(source: &[u8; 20], para_id: u32) {
+    #[allow(deprecated)]
+    let input = Function {
+        name: "withdrawParachainStake".to_string(),
+        inputs: vec![Param {
+            name: "_paraId".to_string(),
+            kind: ParamType::Uint(32),
+            internal_type: None,
+        }],
+        outputs: vec![],
+        constant: None,
+        state_mutability: Default::default(),
+    }
+    .encode_input(&vec![Token::Uint(para_id.into())])
+    .unwrap();
+
+    // call parachain staking contract
+    assert_ok!(EVM::call(
+        RuntimeOrigin::root(),
+        source.into(),
+        STAKING_CONTRACT_ADDRESS.into(),
+        input,
+        U256::zero(),
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
+        None,
+        None,
+        Vec::new()
+    ));
+    System::assert_has_event(
+        pallet_evm::Event::Executed {
+            address: H160(STAKING_CONTRACT_ADDRESS),
+        }
+        .into(),
+    );
+}
+
 pub(crate) fn assert_executed(caller: &[u8; 20]) {
     assert!(System::events().iter().any(|r| {
         match &r.event {
@@ -921,6 +958,62 @@ pub(crate) fn assert_parachain_stake_withdraw_requested_event(
                     Token::Uint(para_id.into()),
                     Token::Bytes(account),
                     Token::Uint(amount.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_stake_withdrawn_event(staker: &[u8; 20]) {
+    let event = Event {
+        name: "StakeWithdrawn".to_string(),
+        inputs: vec![EventParam {
+            name: "_staker".to_string(),
+            kind: ParamType::Address,
+            indexed: false,
+        }],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![Token::Address(staker.into())]),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_parachain_stake_withdrawn_event(para_id: u32, staker: &[u8; 20]) {
+    let event = Event {
+        name: "ParachainStakeWithdrawn".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_paraId".to_string(),
+                kind: ParamType::Uint(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_staker".to_string(),
+                kind: ParamType::Address,
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: STAKING_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::Uint(para_id.into()),
+                    Token::Address(staker.into()),
                 ]),
             },
         }

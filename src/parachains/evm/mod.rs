@@ -1,8 +1,10 @@
 use super::*;
+use core::time::Duration;
 use frame_support::assert_ok;
+use frame_support::traits::UnixTime;
 use moonbase_runtime::{
     asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, EVMConfig,
-    GenesisAccount, Precompiles, Runtime, RuntimeEvent, RuntimeOrigin, System, EVM,
+    GenesisAccount, Precompiles, Runtime, RuntimeEvent, RuntimeOrigin, System, Timestamp, EVM,
 };
 use sp_runtime::app_crypto::sp_core::bytes::from_hex;
 use sp_runtime::app_crypto::sp_core::H160;
@@ -101,6 +103,13 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
         );
     });
     ext
+}
+
+pub(crate) fn advance_time(time_in_secs: u64) {
+    let now = <Timestamp as UnixTime>::now();
+    pallet_timestamp::Now::<Runtime>::set(
+        (now + Duration::from_secs(time_in_secs)).as_millis() as u64
+    );
 }
 
 pub(crate) fn create_xctrb_asset() {
