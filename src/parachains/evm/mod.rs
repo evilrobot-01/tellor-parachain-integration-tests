@@ -2,7 +2,7 @@ use super::*;
 use core::time::Duration;
 use frame_support::assert_ok;
 use frame_support::traits::UnixTime;
-use moonbase_runtime::{
+use moonbeam_runtime::{
     asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, EVMConfig,
     GenesisAccount, Precompiles, Runtime, RuntimeEvent, RuntimeOrigin, System, Timestamp, EVM,
 };
@@ -19,6 +19,7 @@ pub(crate) const ALITH: [u8; 20] = [
 pub(crate) const BALTHAZAR: [u8; 20] = [
     60, 208, 167, 5, 162, 220, 101, 229, 177, 225, 32, 88, 150, 186, 162, 190, 138, 7, 198, 224,
 ];
+#[allow(dead_code)]
 pub(crate) const CHARLETH: [u8; 20] = [
     121, 141, 75, 169, 186, 240, 6, 78, 193, 158, 180, 240, 161, 164, 87, 133, 174, 157, 109, 252,
 ];
@@ -28,7 +29,7 @@ pub(crate) const DOROTHY: [u8; 20] = [
 
 const INITIAL_EVM_BALANCE: u128 = 100 * 10u128.saturating_pow(18);
 pub(crate) const PALLET_DERIVATIVE_ACCOUNT: [u8; 20] = [
-    42, 161, 229, 255, 198, 29, 21, 138, 248, 84, 250, 40, 179, 31, 184, 119, 34, 232, 59, 100,
+    38, 171, 121, 151, 207, 109, 83, 31, 237, 18, 178, 250, 107, 195, 207, 34, 72, 114, 65, 149,
 ];
 pub(crate) const XCTRB_ADDRESS: [u8; 20] = [
     255, 255, 255, 255, 200, 190, 87, 122, 39, 148, 132, 67, 27, 148, 68, 104, 126, 195, 210, 174,
@@ -64,7 +65,7 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     .assimilate_storage(&mut t)
     .unwrap();
 
-    // set precompiles revert bytecode: https://github.com/PureStake/moonbeam/blob/a814fcf36a67f0f14f40afcd7d12fd4f3c5e775b/node/service/src/chain_spec/moonbase.rs#L249
+    // set precompiles revert bytecode: https://github.com/PureStake/moonbeam/blob/a814fcf36a67f0f14f40afcd7d12fd4f3c5e775b/node/service/src/chain_spec/moonbeam.rs#L244
     let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
     let evm_config = EVMConfig {
         // We need _some_ code inserted at the precompile address so evm will actually call the address
@@ -86,7 +87,7 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
         .unwrap();
 
     // set xcm version
-    let xcm_config = moonbase_runtime::PolkadotXcmConfig {
+    let xcm_config = moonbeam_runtime::PolkadotXcmConfig {
         safe_xcm_version: Some(3),
     };
     <pallet_xcm::GenesisConfig as GenesisBuild<Runtime>>::assimilate_storage(&xcm_config, &mut t)

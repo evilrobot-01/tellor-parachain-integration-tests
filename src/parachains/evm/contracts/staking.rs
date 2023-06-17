@@ -1,6 +1,6 @@
 use super::*;
 use ethabi::{Function, Param};
-use moonbase_runtime::Assets;
+use moonbeam_runtime::Assets;
 
 pub(crate) const STAKING_CONTRACT_ADDRESS: [u8; 20] = [
     151, 9, 81, 161, 47, 151, 94, 103, 98, 72, 42, 202, 129, 229, 125, 90, 42, 78, 115, 244,

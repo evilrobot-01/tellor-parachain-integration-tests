@@ -37,10 +37,10 @@ decl_test_parachain! {
 
 decl_test_parachain! {
     pub struct EvmParachain {
-        Runtime = moonbase_runtime::Runtime,
-        RuntimeOrigin = moonbase_runtime::RuntimeOrigin,
-        XcmpMessageHandler = moonbase_runtime::XcmpQueue,
-        DmpMessageHandler = moonbase_runtime::DmpQueue,
+        Runtime = moonbeam_runtime::Runtime,
+        RuntimeOrigin = moonbeam_runtime::RuntimeOrigin,
+        XcmpMessageHandler = moonbeam_runtime::XcmpQueue,
+        DmpMessageHandler = moonbeam_runtime::DmpQueue,
         new_ext = parachains::evm::new_ext(2_000),
     }
 }

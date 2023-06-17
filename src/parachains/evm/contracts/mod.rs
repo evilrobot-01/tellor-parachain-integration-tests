@@ -9,4 +9,4 @@ pub(crate) mod registry;
 pub(crate) mod staking;
 
 const GAS_LIMIT: u64 = 10_000_000;
-const MAX_FEE_PER_GAS: u128 = 1_250_000_000;
+const MAX_FEE_PER_GAS: u128 = 125_000_000_000;

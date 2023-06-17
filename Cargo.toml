@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-account = { git = "https://github.com/purestake/moonbeam", rev = "62ddcf21694c5c6875788acfc309cccf0cc857bd" }
+account = { git = "https://github.com/purestake/moonbeam", rev = "a3e40a9ff4082e278297a4dee3f6a51bab3f6ed1" }
 codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
 ethabi = "18.0.0"
 ethereum = "0.14.0"
@@ -31,18 +31,19 @@ polkadot-runtime-parachains = { git = "https://github.com/paritytech/polkadot", 
 xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.40" }
 
 # Moonbeam
-pallet-asset-manager = { git = "https://github.com/purestake/moonbeam", rev = "62ddcf21694c5c6875788acfc309cccf0cc857bd" }
+pallet-asset-manager = { git = "https://github.com/purestake/moonbeam", rev = "a3e40a9ff4082e278297a4dee3f6a51bab3f6ed1" }
 pallet-ethereum = { git = "https://github.com/purestake/frontier", branch = "moonbeam-polkadot-v0.9.40" }
 pallet-evm = { git = "https://github.com/purestake/frontier", branch = "moonbeam-polkadot-v0.9.40" }
 pallet-xcm = { git = "https://github.com/purestake/polkadot", branch = "moonbeam-polkadot-v0.9.40" }
 
 # Tellor
 tellor = { git = "https://github.com/tellor-io/tellor-pallet" }
+using-tellor = { git = "https://github.com/tellor-io/using-tellor-pallet" }
 
 # Runtimes
 rococo-runtime = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.40" }
 statemine-runtime = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.40" }
-moonbase-runtime = { git = "https://github.com/purestake/moonbeam", rev = "62ddcf21694c5c6875788acfc309cccf0cc857bd" }
+moonbeam-runtime = { git = "https://github.com/purestake/moonbeam", rev = "a3e40a9ff4082e278297a4dee3f6a51bab3f6ed1" }
 oracle-consumer-runtime = { package = "parachain-template-runtime", git = "https://github.com/tellor-io/substrate-parachain-node" }
 
 # Patch Moonbeam
@@ -80,4 +81,6 @@ xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.4
 
 # Patch Tellor
 [patch."https://github.com/tellor-io/tellor-pallet"]
-tellor = { git = "https://github.com/evilrobot-01/tellor-pallet", branch = "frank/update_deps" }
+tellor = { path = "../tellor-pallet" }
+[patch."https://github.com/tellor-io/substrate-parachain-node"]
+parachain-template-runtime = { path = "../substrate-parachain-node/runtime" }

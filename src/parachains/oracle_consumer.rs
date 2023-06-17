@@ -53,7 +53,7 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
 }
 
 pub(crate) fn register(evm_para_id: u32) {
-    use tellor::weights::WeightInfo;
+    use tellor::{weights::WeightInfo, MAX_VOTE_ROUNDS};
     assert_ok!(Tellor::register(RuntimeOrigin::root()));
     let weights = tellor::Weights {
         report_stake_deposited: <() as WeightInfo>::report_stake_deposited().ref_time(),
@@ -61,7 +61,8 @@ pub(crate) fn register(evm_para_id: u32) {
             .ref_time(),
         report_stake_withdrawn: <() as WeightInfo>::report_stake_withdrawn().ref_time(),
         report_vote_tallied: <() as WeightInfo>::report_vote_tallied().ref_time(),
-        report_vote_executed: <() as WeightInfo>::report_vote_executed(u8::MAX.into()).ref_time(),
+        report_vote_executed: <() as WeightInfo>::report_vote_executed(MAX_VOTE_ROUNDS.into())
+            .ref_time(),
         report_slash: <() as WeightInfo>::report_slash().ref_time(),
     };
     System::assert_has_event(
