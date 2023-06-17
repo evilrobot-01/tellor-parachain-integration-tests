@@ -32,7 +32,8 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
             (ALICE, INITIAL_BALANCE),
-            (DAVE, INITIAL_BALANCE), // required for disputes
+            (CHARLIE, INITIAL_BALANCE), // required for tips
+            (DAVE, INITIAL_BALANCE),    // required for disputes
             (PALLET_ACCOUNT.into(), INITIAL_BALANCE),
         ],
     }

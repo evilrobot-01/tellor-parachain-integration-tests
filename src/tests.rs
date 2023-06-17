@@ -66,9 +66,7 @@ fn register_on_consumer_parachain_registers_with_contracts_on_evm_parachain() {
     });
 
     // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-    OracleConsumerParachain::execute_with(|| {
-        parachains::oracle_consumer::register(2_000);
-    });
+    OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
     // ensure registry contract called on evm parachain and expected events emitted
     EvmParachain::execute_with(|| {
@@ -102,9 +100,7 @@ mod staking {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
         let amount =
@@ -153,9 +149,7 @@ mod staking {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
         let amount =
@@ -202,9 +196,7 @@ mod staking {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve, stake trb and request withdrawal from staking contract for oracle consumer parachain
         let amount =
@@ -246,10 +238,10 @@ mod staking {
         });
 
         // ensure staking withdraw request confirmed
-        let amount =
-            <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
         EvmParachain::execute_with(|| {
             use parachains::evm::contracts::staking;
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
             // ensure staking contract called (via pallet derivative account on evm parachain)
             staking::assert_executed(&PALLET_DERIVATIVE_ACCOUNT);
             staking::assert_parachain_stake_withdraw_request_confirmed_event(
@@ -277,16 +269,14 @@ mod staking {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve, stake trb and request withdrawal from staking contract for oracle consumer parachain
-        let amount =
-            <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
         EvmParachain::execute_with(|| {
             use parachains::evm::contracts::staking;
             let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
             staking::mint(asset, &BALTHAZAR, amount);
             staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
             staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
@@ -322,6 +312,79 @@ mod staking {
     }
 }
 
+mod autopay {
+    use super::*;
+    use codec::Compact;
+    use frame_support::bounded_vec;
+
+    #[test]
+    fn claim_onetime_tip_on_consumer_parachain_works() {
+        init_tracing();
+        Network::reset();
+
+        // create trb asset and deploy contracts
+        EvmParachain::execute_with(|| {
+            use parachains::{evm::contracts::*, evm::ALITH};
+            // create asset
+            parachains::evm::create_xctrb_asset();
+            // deploy contracts
+            registry::deploy();
+            staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+            governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+            // init contracts with addresses
+            staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+        });
+
+        // register oracle consumer parachain with contracts on evm parachain via tellor pallet
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
+
+        // mint, approve and stake trb in staking contract for oracle consumer parachain
+        EvmParachain::execute_with(|| {
+            use parachains::evm::contracts::staking;
+            let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+            staking::mint(asset, &BALTHAZAR, amount);
+            staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
+            staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        });
+
+        // add tip, submit value to oracle and then claim
+        OracleConsumerParachain::execute_with(|| {
+            use oracle_consumer_runtime::{RuntimeOrigin, System, Tellor};
+            let query_data = b"hello tellor";
+            let query_id = Keccak256::hash(query_data);
+            let amount = 1_000_000_000_000;
+            // create onetime tip
+            assert_ok!(Tellor::tip(
+                RuntimeOrigin::signed(CHARLIE),
+                query_id,
+                amount,
+                query_data.to_vec().try_into().unwrap()
+            ));
+            // submit value (next block)
+            parachains::oracle_consumer::advance_time(1);
+            parachains::oracle_consumer::submit_value(BOB, query_data, b"hey!");
+            // advance time until claim buffer passed
+            parachains::oracle_consumer::advance_time((12 * HOURS) + 1);
+            // claim tip
+            assert_ok!(Tellor::claim_onetime_tip(
+                RuntimeOrigin::signed(BOB),
+                query_id,
+                bounded_vec![Compact(Tellor::time_of_last_new_value().unwrap())]
+            ));
+            System::assert_has_event(
+                tellor::Event::OneTimeTipClaimed {
+                    query_id,
+                    amount,
+                    reporter: BOB,
+                }
+                .into(),
+            );
+        });
+    }
+}
+
 mod governance {
     use super::*;
 
@@ -345,9 +408,7 @@ mod governance {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
         let amount =
@@ -451,16 +512,14 @@ mod governance {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
-        let amount =
-            <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
         EvmParachain::execute_with(|| {
             use parachains::evm::contracts::staking;
             let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
             staking::mint(asset, &BALTHAZAR, amount);
             staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
             staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
@@ -547,16 +606,14 @@ mod governance {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
-        let amount =
-            <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
         EvmParachain::execute_with(|| {
             use parachains::evm::contracts::staking;
             let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
             staking::mint(asset, &BALTHAZAR, amount);
             staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
             staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
@@ -640,16 +697,14 @@ mod governance {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
-        let amount =
-            <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
         EvmParachain::execute_with(|| {
             use parachains::evm::contracts::staking;
             let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
             staking::mint(asset, &BALTHAZAR, amount);
             staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
             staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
@@ -763,16 +818,14 @@ mod governance {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
-        let amount =
-            <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
         EvmParachain::execute_with(|| {
             use parachains::evm::contracts::staking;
             let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
             staking::mint(asset, &BALTHAZAR, amount);
             staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
             staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
@@ -904,16 +957,14 @@ mod using_tellor {
         });
 
         // register oracle consumer parachain with contracts on evm parachain via tellor pallet
-        OracleConsumerParachain::execute_with(|| {
-            parachains::oracle_consumer::register(2_000);
-        });
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
 
         // mint, approve and stake trb in staking contract for oracle consumer parachain
-        let amount =
-            <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
         EvmParachain::execute_with(|| {
             use parachains::evm::contracts::staking;
             let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
             staking::mint(asset, &BALTHAZAR, amount);
             staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
             staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
