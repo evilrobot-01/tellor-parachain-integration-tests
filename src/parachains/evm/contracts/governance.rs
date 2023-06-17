@@ -598,6 +598,43 @@ pub(crate) fn tally_votes(source: &[u8; 20], dispute_id: H256) {
     );
 }
 
+pub(crate) fn execute_vote(source: &[u8; 20], dispute_id: H256) {
+    #[allow(deprecated)]
+    let input = Function {
+        name: "executeVote".to_string(),
+        inputs: vec![Param {
+            name: "_disputeId".to_string(),
+            kind: ParamType::FixedBytes(32),
+            internal_type: None,
+        }],
+        outputs: vec![],
+        constant: None,
+        state_mutability: Default::default(),
+    }
+    .encode_input(&vec![Token::FixedBytes(dispute_id.0.to_vec())])
+    .unwrap();
+
+    // call parachain governance contract
+    assert_ok!(EVM::call(
+        RuntimeOrigin::root(),
+        source.into(),
+        GOVERNANCE_CONTRACT_ADDRESS.into(),
+        input,
+        U256::zero(),
+        GAS_LIMIT,
+        MAX_FEE_PER_GAS.into(),
+        None,
+        None,
+        Vec::new()
+    ));
+    System::assert_has_event(
+        pallet_evm::Event::Executed {
+            address: H160(GOVERNANCE_CONTRACT_ADDRESS),
+        }
+        .into(),
+    );
+}
+
 pub(crate) fn assert_executed(caller: &[u8; 20]) {
     assert!(System::events().iter().any(|r| {
         match &r.event {
@@ -781,6 +818,39 @@ pub(crate) fn assert_vote_tallied_event(
                     Token::Uint((vote_result as u8).into()),
                     Token::Address(initiator.into()),
                     Token::Address(reporter.into()),
+                ]),
+            },
+        }
+        .into(),
+    );
+}
+
+pub(crate) fn assert_vote_executed_event(dispute_id: H256, vote_result: u8) {
+    let event = Event {
+        name: "VoteExecuted".to_string(),
+        inputs: vec![
+            EventParam {
+                name: "_disputeId".to_string(),
+                kind: ParamType::FixedBytes(32),
+                indexed: false,
+            },
+            EventParam {
+                name: "_result".to_string(),
+                kind: ParamType::Uint(8),
+                indexed: false,
+            },
+        ],
+        anonymous: false,
+    };
+
+    System::assert_has_event(
+        pallet_evm::Event::Log {
+            log: ethereum::Log {
+                address: GOVERNANCE_CONTRACT_ADDRESS.into(),
+                topics: vec![event.signature()],
+                data: encode(&vec![
+                    Token::FixedBytes(dispute_id.0.to_vec()),
+                    Token::Uint((vote_result as u8).into()),
                 ]),
             },
         }
