@@ -354,7 +354,7 @@ mod autopay {
             use oracle_consumer_runtime::{RuntimeOrigin, System, Tellor};
             let query_data = b"hello tellor";
             let query_id = Keccak256::hash(query_data);
-            let amount = 1_000_000_000_000;
+            let amount = 1_000;
             // create onetime tip
             assert_ok!(Tellor::tip(
                 RuntimeOrigin::signed(CHARLIE),
@@ -362,6 +362,15 @@ mod autopay {
                 amount,
                 query_data.to_vec().try_into().unwrap()
             ));
+            System::assert_has_event(
+                tellor::Event::TipAdded {
+                    query_id,
+                    amount,
+                    query_data: query_data.to_vec().try_into().unwrap(),
+                    tipper: CHARLIE,
+                }
+                .into(),
+            );
             // submit value (next block)
             parachains::oracle_consumer::advance_time(1);
             parachains::oracle_consumer::submit_value(BOB, query_data, b"hey!");
@@ -377,6 +386,104 @@ mod autopay {
                 tellor::Event::OneTimeTipClaimed {
                     query_id,
                     amount,
+                    reporter: BOB,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn claim_tip_on_consumer_parachain_works() {
+        init_tracing();
+        Network::reset();
+
+        // create trb asset and deploy contracts
+        EvmParachain::execute_with(|| {
+            use parachains::{evm::contracts::*, evm::ALITH};
+            // create asset
+            parachains::evm::create_xctrb_asset();
+            // deploy contracts
+            registry::deploy();
+            staking::deploy(&REGISTRY_CONTRACT_ADDRESS, &XCTRB_ADDRESS);
+            governance::deploy(&REGISTRY_CONTRACT_ADDRESS, &ALITH);
+            // init contracts with addresses
+            staking::init(&GOVERNANCE_CONTRACT_ADDRESS);
+        });
+
+        // register oracle consumer parachain with contracts on evm parachain via tellor pallet
+        OracleConsumerParachain::execute_with(|| parachains::oracle_consumer::register(2_000));
+
+        // mint, approve and stake trb in staking contract for oracle consumer parachain
+        EvmParachain::execute_with(|| {
+            use parachains::evm::contracts::staking;
+            let asset = u128::from_be_bytes(XCTRB_ADDRESS[4..].try_into().unwrap());
+            let amount =
+                <oracle_consumer_runtime::Runtime as tellor::Config>::MinimumStakeAmount::get();
+            staking::mint(asset, &BALTHAZAR, amount);
+            staking::approve(&BALTHAZAR, asset, &STAKING_CONTRACT_ADDRESS, amount);
+            staking::deposit_parachain_stake(&BALTHAZAR, 3_000, BOB.to_raw_vec(), amount);
+        });
+
+        // create feed, submit value to oracle and then claim
+        OracleConsumerParachain::execute_with(|| {
+            use oracle_consumer_runtime::{AccountId, RuntimeOrigin, System, Tellor};
+            let query_data = b"hello tellor";
+            let query_id = Keccak256::hash(query_data);
+            let amount = 10_000;
+            // setup data feed
+            let reward = 1_000;
+            let start_time = <Tellor as tellor::UsingTellor<AccountId>>::now();
+            let interval = 600;
+            let window = 12;
+            let price_threshold = 0;
+            let reward_increase_per_second = 0;
+            assert_ok!(Tellor::setup_data_feed(
+                RuntimeOrigin::signed(CHARLIE),
+                query_id,
+                reward,
+                start_time,
+                interval,
+                window,
+                price_threshold,
+                reward_increase_per_second,
+                query_data.to_vec().try_into().unwrap(),
+                amount
+            ));
+            let feed_id = parachains::oracle_consumer::feed_id(
+                query_id,
+                reward,
+                start_time,
+                interval,
+                window,
+                price_threshold,
+                reward_increase_per_second,
+            );
+            System::assert_has_event(
+                tellor::Event::NewDataFeed {
+                    query_id,
+                    feed_id,
+                    query_data: query_data.to_vec().try_into().unwrap(),
+                    feed_creator: CHARLIE,
+                }
+                .into(),
+            );
+            // submit value
+            parachains::oracle_consumer::submit_value(BOB, query_data, b"hey!");
+            // advance time until claim buffer passed
+            parachains::oracle_consumer::advance_time((12 * HOURS) + 1);
+            // claim tip
+            assert_ok!(Tellor::claim_tip(
+                RuntimeOrigin::signed(BOB),
+                feed_id,
+                query_id,
+                bounded_vec![Compact(Tellor::time_of_last_new_value().unwrap())]
+            ));
+            System::assert_has_event(
+                tellor::Event::TipClaimed {
+                    feed_id,
+                    query_id,
+                    amount: reward,
                     reporter: BOB,
                 }
                 .into(),

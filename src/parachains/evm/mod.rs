@@ -1,13 +1,11 @@
 use super::*;
 use core::time::Duration;
-use frame_support::assert_ok;
-use frame_support::traits::UnixTime;
+use frame_support::{assert_ok, traits::UnixTime};
 use moonbeam_runtime::{
     asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, EVMConfig,
     GenesisAccount, Precompiles, Runtime, RuntimeEvent, RuntimeOrigin, System, Timestamp, EVM,
 };
-use sp_runtime::app_crypto::sp_core::bytes::from_hex;
-use sp_runtime::app_crypto::sp_core::H160;
+use sp_runtime::{app_crypto::sp_core::bytes::from_hex, app_crypto::sp_core::H160};
 use xcm::prelude::{GeneralIndex, PalletInstance, Parachain};
 use xcm::v3::{Junctions, MultiLocation};
 
@@ -26,16 +24,11 @@ pub(crate) const CHARLETH: [u8; 20] = [
 pub(crate) const DOROTHY: [u8; 20] = [
     119, 53, 57, 212, 172, 14, 120, 98, 51, 217, 10, 35, 54, 84, 204, 238, 38, 166, 19, 217,
 ];
-
-const INITIAL_EVM_BALANCE: u128 = 100 * 10u128.saturating_pow(18);
 pub(crate) const PALLET_DERIVATIVE_ACCOUNT: [u8; 20] = [
     38, 171, 121, 151, 207, 109, 83, 31, 237, 18, 178, 250, 107, 195, 207, 34, 72, 114, 65, 149,
 ];
 pub(crate) const XCTRB_ADDRESS: [u8; 20] = [
     255, 255, 255, 255, 200, 190, 87, 122, 39, 148, 132, 67, 27, 148, 68, 104, 126, 195, 210, 174,
-];
-const OCP_SOVEREIGN_ACCOUNT: [u8; 20] = [
-    115, 105, 98, 108, 184, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
@@ -56,10 +49,12 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     // set initial balances
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
-            (ALITH.into(), INITIAL_EVM_BALANCE),
-            (BALTHAZAR.into(), INITIAL_EVM_BALANCE),
-            (PALLET_DERIVATIVE_ACCOUNT.into(), INITIAL_EVM_BALANCE),
-            (OCP_SOVEREIGN_ACCOUNT.into(), INITIAL_EVM_BALANCE),
+            (ALITH.into(), 2 * 10u128.saturating_pow(18)), // contract deployment
+            (BALTHAZAR.into(), 2 * 10u128.saturating_pow(18)), // contract transactions
+            (
+                PALLET_DERIVATIVE_ACCOUNT.into(),
+                1 * 10u128.saturating_pow(18), // required for xcm fees
+            ),
         ],
     }
     .assimilate_storage(&mut t)

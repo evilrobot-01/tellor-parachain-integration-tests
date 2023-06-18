@@ -1,13 +1,20 @@
 use super::*;
 use crate::relay_chain::*;
 use core::time::Duration;
-use frame_support::traits::UnixTime;
-use frame_support::{assert_ok, BoundedVec};
-use oracle_consumer_runtime::{Runtime, RuntimeOrigin, System, Tellor, Timestamp};
-use sp_runtime::traits::{Hash, Keccak256};
-use sp_runtime::AccountId32;
+use ethabi::ethereum_types::H256;
+use frame_support::{
+    assert_ok,
+    traits::{fungible::Inspect, UnixTime},
+    BoundedVec,
+};
+use oracle_consumer_runtime::{
+    Balance, Balances, Runtime, RuntimeOrigin, System, Tellor, Timestamp,
+};
+use sp_runtime::{
+    traits::{Hash, Keccak256},
+    AccountId32,
+};
 
-const INITIAL_BALANCE: u128 = 1_000 * 10u128.pow(12);
 const PALLET_ACCOUNT: [u8; 32] = [
     109, 111, 100, 108, 112, 121, 47, 116, 101, 108, 108, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -31,10 +38,10 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     // set initial balances
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
-            (ALICE, INITIAL_BALANCE),
-            (CHARLIE, INITIAL_BALANCE), // required for tips
-            (DAVE, INITIAL_BALANCE),    // required for disputes
-            (PALLET_ACCOUNT.into(), INITIAL_BALANCE),
+            (BOB, Balances::minimum_balance()), // required to claim tips
+            (CHARLIE, 10 * 10u128.pow(12)),     // required for tips
+            (DAVE, 55 * 10u128.pow(12)),        // required for disputes
+            (PALLET_ACCOUNT.into(), 1 * 10u128.pow(12)), // required for xcm fees
         ],
     }
     .assimilate_storage(&mut t)
@@ -51,6 +58,27 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
         );
     });
     ext
+}
+
+pub(crate) fn feed_id(
+    query_id: H256,
+    reward: Balance,
+    start_time: u64,
+    interval: u64,
+    window: u64,
+    price_threshold: u16,
+    reward_increase_per_second: Balance,
+) -> H256 {
+    use ethabi::Token::*;
+    Keccak256::hash(&ethabi::encode(&vec![
+        FixedBytes(query_id.0.to_vec()),
+        Uint(reward.into()),
+        Uint(start_time.into()),
+        Uint(interval.into()),
+        Uint(window.into()),
+        Uint(price_threshold.into()),
+        Uint(reward_increase_per_second.into()),
+    ]))
 }
 
 pub(crate) fn register(evm_para_id: u32) {
