@@ -78,7 +78,3 @@ cumulus-primitives-core = { git = "https://github.com/paritytech/cumulus", branc
 parachain-info = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.40" }
 [patch."https://github.com/purestake/polkadot"]
 xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.40" }
-
-# Patch Tellor
-[patch."https://github.com/tellor-io/substrate-parachain-node"]
-parachain-template-runtime = { path = "../substrate-parachain-node/runtime" }
