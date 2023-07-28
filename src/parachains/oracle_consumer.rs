@@ -11,14 +11,9 @@ use oracle_consumer_runtime::{
     Balance, Balances, Runtime, RuntimeOrigin, System, Tellor, Timestamp,
 };
 use sp_runtime::{
-    traits::{Hash, Keccak256},
+    traits::{AccountIdConversion, Hash, Keccak256},
     AccountId32,
 };
-
-const PALLET_ACCOUNT: [u8; 32] = [
-    109, 111, 100, 108, 112, 121, 47, 116, 101, 108, 108, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-];
 
 pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     let mut t = frame_system::GenesisConfig::default()
@@ -36,12 +31,22 @@ pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
     .unwrap();
 
     // set initial balances
+    let pallet_id = <Runtime as tellor::Config>::PalletId::get();
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
             (BOB, Balances::minimum_balance()), // required to claim tips
             (CHARLIE, 10 * 10u128.pow(12)),     // required for tips
             (DAVE, 55 * 10u128.pow(12)),        // required for disputes
-            (PALLET_ACCOUNT.into(), 1 * 10u128.pow(12)), // required for xcm fees
+            (pallet_id.into_account_truncating(), 1 * 10u128.pow(12)), // required for xcm fees
+            // initialise sub-accounts
+            (
+                pallet_id.into_sub_account_truncating(b"tips"),
+                Balances::minimum_balance(),
+            ),
+            (
+                pallet_id.into_sub_account_truncating(b"staking"),
+                Balances::minimum_balance(),
+            ),
         ],
     }
     .assimilate_storage(&mut t)
