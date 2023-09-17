@@ -1,5 +1,4 @@
 use super::*;
-use crate::relay_chain::*;
 use core::time::Duration;
 use ethabi::ethereum_types::H256;
 use frame_support::{
@@ -7,62 +6,108 @@ use frame_support::{
     traits::{fungible::Inspect, UnixTime},
     BoundedVec,
 };
+use integration_tests_common::constants::accounts;
 use oracle_consumer_runtime::{
-    Balance, Balances, Runtime, RuntimeOrigin, System, Tellor, Timestamp,
+    Balance, Balances, BalancesConfig, CollatorSelectionConfig, GenesisConfig, ParachainInfoConfig,
+    PolkadotXcmConfig, Runtime, RuntimeOrigin, SessionConfig, SessionKeys, System, SystemConfig,
+    Tellor, Timestamp, WASM_BINARY,
 };
 use sp_runtime::{
     traits::{AccountIdConversion, Hash, Keccak256},
     AccountId32,
 };
 
-pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
-    let mut t = frame_system::GenesisConfig::default()
-        .build_storage::<Runtime>()
-        .unwrap();
+lazy_static! {
+    pub(crate) static ref BOB: AccountId = OracleConsumerParachain::account_id_of(accounts::BOB);
+    pub(crate) static ref CHARLIE: AccountId =
+        OracleConsumerParachain::account_id_of(accounts::CHARLIE);
+    pub(crate) static ref DAVE: AccountId = OracleConsumerParachain::account_id_of(accounts::DAVE);
+}
 
-    // set parachain id
-    let parachain_info_config = parachain_info::GenesisConfig {
-        parachain_id: para_id.into(),
+pub(crate) fn genesis() -> Storage {
+    const PARA_ID: ParaId = ParaId::new(3_000);
+
+    let pallet_id =
+        <<OracleConsumerParachain as Parachain>::Runtime as tellor::Config>::PalletId::get();
+
+    let genesis_config = GenesisConfig {
+        system: SystemConfig {
+            code: WASM_BINARY
+                .expect("WASM binary was not build, please build it!")
+                .to_vec(),
+            ..Default::default()
+        },
+        balances: BalancesConfig {
+            balances: vec![
+                (
+                    // required to claim tips
+                    BOB.clone(),
+                    Balances::minimum_balance(),
+                ),
+                (
+                    // required for tips
+                    CHARLIE.clone(),
+                    10 * 10u128.pow(12),
+                ),
+                (
+                    // required for disputes
+                    DAVE.clone(),
+                    55 * 10u128.pow(12),
+                ),
+                // required for fees
+                (pallet_id.into_account_truncating(), 1 * 10u128.pow(12)),
+                // initialise sub-accounts
+                (
+                    pallet_id.into_sub_account_truncating(b"tips"),
+                    Balances::minimum_balance(),
+                ),
+                (
+                    pallet_id.into_sub_account_truncating(b"staking"),
+                    Balances::minimum_balance(),
+                ),
+            ],
+        },
+        collator_selection: CollatorSelectionConfig {
+            invulnerables: collators::invulnerables()
+                .iter()
+                .cloned()
+                .map(|(acc, _)| acc)
+                .collect(),
+            candidacy_bond: Balances::minimum_balance() * 16,
+            ..Default::default()
+        },
+        parachain_info: ParachainInfoConfig {
+            parachain_id: PARA_ID,
+            ..Default::default()
+        },
+        session: SessionConfig {
+            keys: collators::invulnerables()
+                .into_iter()
+                .map(|(acc, aura)| {
+                    (
+                        acc.clone(),          // account id
+                        acc,                  // validator id
+                        SessionKeys { aura }, // session keys
+                    )
+                })
+                .collect(),
+        },
+        polkadot_xcm: PolkadotXcmConfig {
+            safe_xcm_version: Some(XCM_VERSION),
+            ..Default::default()
+        },
+        ..Default::default()
     };
-    <parachain_info::GenesisConfig as GenesisBuild<Runtime, _>>::assimilate_storage(
-        &parachain_info_config,
-        &mut t,
-    )
-    .unwrap();
+    genesis_config.build_storage().unwrap()
+}
 
-    // set initial balances
-    let pallet_id = <Runtime as tellor::Config>::PalletId::get();
-    pallet_balances::GenesisConfig::<Runtime> {
-        balances: vec![
-            (BOB, Balances::minimum_balance()), // required to claim tips
-            (CHARLIE, 10 * 10u128.pow(12)),     // required for tips
-            (DAVE, 55 * 10u128.pow(12)),        // required for disputes
-            (pallet_id.into_account_truncating(), 1 * 10u128.pow(12)), // required for xcm fees
-            // initialise sub-accounts
-            (
-                pallet_id.into_sub_account_truncating(b"tips"),
-                Balances::minimum_balance(),
-            ),
-            (
-                pallet_id.into_sub_account_truncating(b"staking"),
-                Balances::minimum_balance(),
-            ),
-        ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
-    let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| {
-        System::set_block_number(1);
-        pallet_timestamp::Now::<Runtime>::put(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Current time is always after unix epoch; qed")
-                .as_millis() as u64,
-        );
-    });
-    ext
+pub(crate) fn init() {
+    pallet_timestamp::Now::<<OracleConsumerParachain as xcm_emulator::Parachain>::Runtime>::put(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Current time is always after unix epoch; qed")
+            .as_millis() as u64,
+    );
 }
 
 pub(crate) fn feed_id(
@@ -86,7 +131,7 @@ pub(crate) fn feed_id(
     ]))
 }
 
-pub(crate) fn register(evm_para_id: u32) {
+pub(crate) fn register(evm_para_id: impl Into<u32>) {
     use tellor::{weights::WeightInfo, MAX_VOTE_ROUNDS};
     assert_ok!(Tellor::register(RuntimeOrigin::root()));
     let weights = tellor::Weights {
@@ -101,8 +146,8 @@ pub(crate) fn register(evm_para_id: u32) {
     };
     System::assert_has_event(
         tellor::Event::RegistrationSent {
-            para_id: evm_para_id,
-            contract_address: evm::contracts::registry::REGISTRY_CONTRACT_ADDRESS.into(),
+            para_id: evm_para_id.into(),
+            contract_address: *evm::contracts::registry::REGISTRY_CONTRACT_ADDRESS,
             weights,
         }
         .into(),
@@ -137,7 +182,7 @@ pub(crate) fn submit_value(
             value,
             nonce,
             query_data,
-            reporter: BOB,
+            reporter: BOB.clone(),
         }
         .into(),
     );

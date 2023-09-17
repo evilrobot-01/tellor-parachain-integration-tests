@@ -1,9 +1,11 @@
 use super::*;
+use account::AccountId20;
 use core::time::Duration;
 use frame_support::{assert_ok, traits::UnixTime};
 use moonbeam_runtime::{
-    asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, EVMConfig,
-    GenesisAccount, Precompiles, Runtime, RuntimeEvent, RuntimeOrigin, System, Timestamp, EVM,
+    asset_config::AssetRegistrarMetadata, xcm_config::AssetType, AssetManager, BalancesConfig,
+    EVMConfig, GenesisAccount, GenesisConfig, ParachainInfoConfig, PolkadotXcmConfig, Precompiles,
+    Runtime, RuntimeEvent, RuntimeOrigin, System, SystemConfig, Timestamp, EVM, WASM_BINARY,
 };
 use sp_runtime::{app_crypto::sp_core::bytes::from_hex, app_crypto::sp_core::H160};
 use xcm::prelude::{GeneralIndex, PalletInstance, Parachain};
@@ -11,94 +13,86 @@ use xcm::v3::{Junctions, MultiLocation};
 
 pub(crate) mod contracts;
 
-pub(crate) const ALITH: [u8; 20] = [
-    242, 79, 243, 169, 207, 4, 199, 29, 188, 148, 208, 181, 102, 247, 162, 123, 148, 86, 108, 172,
-];
-pub(crate) const BALTHAZAR: [u8; 20] = [
-    60, 208, 167, 5, 162, 220, 101, 229, 177, 225, 32, 88, 150, 186, 162, 190, 138, 7, 198, 224,
-];
-#[allow(dead_code)]
-pub(crate) const CHARLETH: [u8; 20] = [
-    121, 141, 75, 169, 186, 240, 6, 78, 193, 158, 180, 240, 161, 164, 87, 133, 174, 157, 109, 252,
-];
-pub(crate) const DOROTHY: [u8; 20] = [
-    119, 53, 57, 212, 172, 14, 120, 98, 51, 217, 10, 35, 54, 84, 204, 238, 38, 166, 19, 217,
-];
-pub(crate) const PALLET_DERIVATIVE_ACCOUNT: [u8; 20] = [
-    38, 171, 121, 151, 207, 109, 83, 31, 237, 18, 178, 250, 107, 195, 207, 34, 72, 114, 65, 149,
-];
-pub(crate) const XCTRB_ADDRESS: [u8; 20] = [
-    255, 255, 255, 255, 200, 190, 87, 122, 39, 148, 132, 67, 27, 148, 68, 104, 126, 195, 210, 174,
-];
+lazy_static! {
+    // https://github.com/moonbeam-foundation/moonbeam#prefunded-development-addresses
+    pub(crate) static ref ALITH: Address =
+        address_of("f24FF3a9CF04c71Dbc94D0b566f7A27B94566cac");
+    pub(crate) static ref BALTHAZAR: Address =
+        address_of("3Cd0A705a2DC65e5b1E1205896BaA2be8A07c6e0");
+    pub(crate) static ref CHARLETH: Address =
+        address_of("798d4Ba9baf0064Ec19eB4F0a1a45785ae9D6DFc");
+    pub(crate) static ref DOROTHY: Address =
+        address_of("773539d4Ac0e786233D90A233654ccEE26a613D9");
+    pub(crate) static ref PALLET_DERIVATIVE_ACCOUNT: Address =
+        address_of("26ab7997cf6d531fed12b2fa6bc3cf2248724195");
+    pub(crate) static ref XCTRB_ADDRESS: Address =
+        address_of("ffffffffc8be577a279484431b9444687ec3d2ae");
+}
 
-pub(crate) fn new_ext(para_id: u32) -> sp_io::TestExternalities {
-    let mut t = frame_system::GenesisConfig::default()
-        .build_storage::<Runtime>()
-        .unwrap();
+fn address_of(address: &str) -> H160 {
+    use std::str::FromStr;
+    H160::from_str(address).expect("internal H160 is valid; qed")
+}
 
-    // set parachain id
-    let parachain_info_config = parachain_info::GenesisConfig {
-        parachain_id: para_id.into(),
-    };
-    <parachain_info::GenesisConfig as GenesisBuild<Runtime, _>>::assimilate_storage(
-        &parachain_info_config,
-        &mut t,
-    )
-    .unwrap();
-
-    // set initial balances
-    pallet_balances::GenesisConfig::<Runtime> {
-        balances: vec![
-            (ALITH.into(), 2 * 10u128.saturating_pow(18)), // contract deployment
-            (BALTHAZAR.into(), 2 * 10u128.saturating_pow(18)), // contract transactions
-            (
-                PALLET_DERIVATIVE_ACCOUNT.into(),
-                1 * 10u128.saturating_pow(18), // required for xcm fees
-            ),
-        ],
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
+pub(crate) fn genesis() -> Storage {
+    const PARA_ID: ParaId = ParaId::new(2_000);
 
     // set precompiles revert bytecode: https://github.com/PureStake/moonbeam/blob/a814fcf36a67f0f14f40afcd7d12fd4f3c5e775b/node/service/src/chain_spec/moonbeam.rs#L244
     let revert_bytecode = vec![0x60, 0x00, 0x60, 0x00, 0xFD];
-    let evm_config = EVMConfig {
-        // We need _some_ code inserted at the precompile address so evm will actually call the address
-        accounts: Precompiles::used_addresses()
-            .map(|addr| {
+
+    let genesis_config = GenesisConfig {
+        system: SystemConfig {
+            code: WASM_BINARY
+                .expect("WASM binary was not build, please build it!")
+                .to_vec(),
+            ..Default::default()
+        },
+        balances: BalancesConfig {
+            balances: vec![
+                ((*ALITH).into(), 2 * 10u128.saturating_pow(18)), // contract deployment
+                ((*BALTHAZAR).into(), 2 * 10u128.saturating_pow(18)), // contract transactions
                 (
-                    addr.into(),
-                    GenesisAccount {
-                        nonce: Default::default(),
-                        balance: Default::default(),
-                        storage: Default::default(),
-                        code: revert_bytecode.clone(),
-                    },
-                )
-            })
-            .collect(),
+                    (*PALLET_DERIVATIVE_ACCOUNT).into(),
+                    1 * 10u128.saturating_pow(18), // required for xcm fees
+                ),
+            ],
+        },
+        evm: EVMConfig {
+            // We need _some_ code inserted at the precompile address so evm will actually call the address
+            accounts: Precompiles::used_addresses()
+                .map(|addr| {
+                    (
+                        addr.into(),
+                        GenesisAccount {
+                            nonce: Default::default(),
+                            balance: Default::default(),
+                            storage: Default::default(),
+                            code: revert_bytecode.clone(),
+                        },
+                    )
+                })
+                .collect(),
+        },
+        parachain_info: ParachainInfoConfig {
+            parachain_id: PARA_ID,
+            ..Default::default()
+        },
+        polkadot_xcm: PolkadotXcmConfig {
+            safe_xcm_version: Some(XCM_VERSION),
+            ..Default::default()
+        },
+        ..Default::default()
     };
-    <pallet_evm::GenesisConfig as GenesisBuild<Runtime>>::assimilate_storage(&evm_config, &mut t)
-        .unwrap();
+    genesis_config.build_storage().unwrap()
+}
 
-    // set xcm version
-    let xcm_config = moonbeam_runtime::PolkadotXcmConfig {
-        safe_xcm_version: Some(3),
-    };
-    <pallet_xcm::GenesisConfig as GenesisBuild<Runtime>>::assimilate_storage(&xcm_config, &mut t)
-        .unwrap();
-
-    let mut ext = sp_io::TestExternalities::new(t);
-    ext.execute_with(|| {
-        System::set_block_number(1);
-        pallet_timestamp::Now::<Runtime>::put(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Current time is always after unix epoch; qed")
-                .as_millis() as u64,
-        );
-    });
-    ext
+pub(crate) fn init() {
+    pallet_timestamp::Now::<<EvmParachain as xcm_emulator::Parachain>::Runtime>::put(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Current time is always after unix epoch; qed")
+            .as_millis() as u64,
+    );
 }
 
 pub(crate) fn advance_time(time_in_secs: u64) {
