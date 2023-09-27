@@ -133,7 +133,7 @@ pub(crate) fn feed_id(
 
 pub(crate) fn register(evm_para_id: impl Into<u32>) {
     use tellor::{weights::WeightInfo, MAX_VOTE_ROUNDS};
-    assert_ok!(Tellor::register(RuntimeOrigin::root()));
+    assert_ok!(Tellor::register(RuntimeOrigin::root(), None));
     let weights = tellor::Weights {
         report_stake_deposited: <() as WeightInfo>::report_stake_deposited().ref_time(),
         report_staking_withdraw_request: <() as WeightInfo>::report_staking_withdraw_request()

@@ -51,14 +51,14 @@ pallet-evm = { git = "https://github.com/moonbeam-foundation/frontier", branch =
 pallet-xcm = { git = "https://github.com/moonbeam-foundation/polkadot", branch = "moonbeam-polkadot-v0.9.43" }
 
 # Tellor
-tellor = { git = "https://github.com/tellor-io/tellor-pallet", branch = "frank/update-deps" }
-using-tellor = { git = "https://github.com/tellor-io/using-tellor-pallet", branch = "frank/update-deps" }
+tellor = { git = "https://github.com/tellor-io/tellor-pallet" }
+using-tellor = { git = "https://github.com/tellor-io/tellor-pallet" }
 
 # Runtimes
 rococo-runtime = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.43" }
 statemine-runtime = { git = "https://github.com/paritytech/cumulus", branch = "polkadot-v0.9.43" }
 moonbeam-runtime = { git = "https://github.com/moonbeam-foundation/moonbeam", rev = "63160c774dffc68a4c3841727ed8878f7b551918" }
-oracle-consumer-runtime = { package = "parachain-template-runtime", git = "https://github.com/tellor-io/substrate-parachain-node", features = ["moonbeam"], branch = "frank/update-deps" }
+oracle-consumer-runtime = { package = "parachain-template-runtime", git = "https://github.com/tellor-io/substrate-parachain-node", features = ["moonbeam"] }
 
 # Patch Moonbeam
 [patch."https://github.com/moonbeam-foundation/substrate"]
