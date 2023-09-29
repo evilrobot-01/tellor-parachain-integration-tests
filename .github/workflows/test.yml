@@ -32,7 +32,6 @@ jobs:
         run: cargo nextest run --release --profile ci
       - name: Report pallet test results
         uses: dorny/test-reporter@v1
-        if: success() || failure()    # run this step even if previous step failed
         with:
           name: integration-tests
           path: target/nextest/ci/junit.xml
