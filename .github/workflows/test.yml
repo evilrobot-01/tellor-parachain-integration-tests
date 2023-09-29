@@ -10,6 +10,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v3
@@ -38,7 +40,7 @@ jobs:
       - name: Run tests
         run: cargo nextest run --release --profile ci
 
-      - name: Report pallet test results
+      - name: Report test results
         uses: dorny/test-reporter@v1
         with:
           name: integration-tests
